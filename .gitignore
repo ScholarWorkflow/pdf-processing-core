@@ -1,0 +1,26 @@
+# Generated runtime and cache artifacts
+__pycache__/
+.DS_Store
+.venv/
+*.py[cod]
+# Runtime backup and temporary files
+*.runtime-backup-*
+*.runtime-tmp-*
+*.skillrepo-backup-*
+*.skillrepo-tmp-*
+*.tmp
+*.log
+dist/
+.pytest_cache/
+*.faudit.json
+*.regions.json
+*.toc.bak.json
+_texlayer_audit.json
+.ocr_units/
+.formula-repair-state.json
+*.ocr_repair_state.json
+# Atomic writer leftovers created beside source files.
+.*.headings.*
+.*.normalize.*
+.*.formula-repair.*
+.*.ocr_repair_state.json.*

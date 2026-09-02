@@ -1,0 +1,17 @@
+{
+  "schema": "formula-repair-concurrency-benchmark/1",
+  "profiles": {
+    "default": {
+      "workers": 1,
+      "jobs_per_lane": 1,
+      "source": "synthetic benchmark maintained outside the source tree"
+    }
+  },
+  "profile_schema": {
+    "<non_sensitive_visual_config_fingerprint>": {
+      "workers": 1,
+      "jobs_per_lane": 1,
+      "source": "external synthetic benchmark report"
+    }
+  }
+}

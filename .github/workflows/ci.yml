@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+      - name: Run tests
+        run: uv run --with pytest,pymupdf pytest -q lib/pdfx .apm/skills/formula-repair/tests .apm/skills/llm-ocr-refresh/tests test
+      - name: Check package imports
+        run: uv run python -c "import pdfx; import pdfx.quality; import pdfx.extract; import pdfx.status"
+      - name: Check installed CLI outside checkout
+        run: |
+          uv tool install --editable . --force
+          cd /tmp
+          command -v pdfx
+          pdfx --help >/dev/null
+          pdfx quality --help >/dev/null

@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pdf-processing-core"
+version = "0.1.0"
+description = "Shared PDF, OCR, and formula-processing primitives."
+requires-python = ">=3.11"
+dependencies = ["PyMuPDF>=1.24"]
+
+[project.scripts]
+pdfx = "pdfx.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["lib/pdfx"]
