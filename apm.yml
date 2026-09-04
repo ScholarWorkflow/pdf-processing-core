@@ -1,5 +1,5 @@
 name: pdf-processing-core
 version: 0.1.0
 description: Shared PDF extraction, OCR, quality-audit, formula-validation, and atomic source-repair primitives.
-targets: [opencode]
+targets: [opencode, codex]
 includes: auto
