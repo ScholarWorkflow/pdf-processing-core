@@ -34,10 +34,10 @@ Accept any of the following, then resolve a source document and its paired PDF:
 
 ## `check` pre-consumption command
 
-Call before a caller consumes a formula-bearing source:
+Call before a caller consumes a formula-bearing source. All `pdfx` kernel commands and runner invocations run inside this repo's producer Python project environment (`uv run --project "<pdf-processing-core project root>" --locked ...`); the project root is the installation of this repo containing `pyproject.toml` (naming `pdf-processing-core`) and `uv.lock` — in an APM consumer `<consumer root>/apm_modules/ScholarWorkflow/pdf-processing-core/`, in a direct checkout the checkout root itself. Never recursively search caller-owned directories to find it.
 
 ```bash
-pdfx formula-check "<target>" --json
+uv run --project "<pdf-processing-core project root>" --locked pdfx formula-check "<target>" --json
 ```
 
 `<target>` may be a paired PDF or source document. The command resolves the pair and returns:
@@ -56,7 +56,7 @@ pdfx formula-check "<target>" --json
 For a source/PDF pair:
 
 ```bash
-pdfx formula-audit "<paired PDF>" --extraction-dir "<source root or omit>" --project
+uv run --project "<pdf-processing-core project root>" --locked pdfx formula-audit "<paired PDF>" --extraction-dir "<source root or omit>" --project
 ```
 
 - `--project` idempotently projects the aggregate verdict into source metadata.
@@ -77,13 +77,13 @@ The runner creates `<source_root>/.formula-repair-state.json` and transient `.oc
 - successful finalization removes OCR unit prose and keeps short state records;
 - interrupted `running` jobs return to `pending` while retaining attempts; the third failure becomes `degraded` and ordinary resume does not reopen it.
 
-Invoke the repository-owned runner through the public runtime entry point:
+Invoke the repository-owned runner inside the producer Python project environment defined above:
 
 ```bash
-skillrepo exec pdf-processing-core .apm/skills/formula-repair/formula_repair_runner.py
+uv run --project "<pdf-processing-core project root>" --locked python "<pdf-processing-core project root>/.apm/skills/formula-repair/formula_repair_runner.py" <subcommand> ...
 ```
 
-In a runtime without a `skillrepo` launcher (for example a Codex session in a clean APM consumer), execute the same repository-owned runner from this repo's installed APM module source instead: `<consumer root>/apm_modules/ScholarWorkflow/pdf-processing-core/.apm/skills/formula-repair/formula_repair_runner.py`. The runners resolve this repo's own `lib/pdfx` tooling relative to their own location, so this module-source copy is the only location that keeps the repository topology they require; the relocated `.agents/skills/formula-repair/` deployment is a file projection and must not be executed directly. Never substitute a different runner.
+When APM has deployed this repo, the same repository-owned runner file also exists at the deployed skill location `<consumer root>/.agents/skills/formula-repair/formula_repair_runner.py` and executes identically under the same producer project environment — script location does not change which `pdfx` runs. Never substitute a different runner.
 
 The refresh skill's unit-worker mode reads job JSON, uses the configured visual-OCR provider abstraction, writes unit results, and never writes source documents, audit sidecars, manifests, or downstream indexes. A worker does not choose a provider or model.
 
@@ -117,7 +117,7 @@ If the unit-worker registration is unavailable, run `recover` for already claime
 5. After the refresh completion marker, finalize atomically and run a fresh audit:
 
 ```bash
-pdfx formula-audit "<paired PDF>" --force --project
+uv run --project "<pdf-processing-core project root>" --locked pdfx formula-audit "<paired PDF>" --force --project
 ```
 
 6. Release only when every region is `ok`. Otherwise retry failed units up to 3 times; then return `degraded` with the reason.

@@ -53,10 +53,12 @@ Run `pwd` first and use its output verbatim. Never recursively scan large caller
 
 ### Step 1 — audit (generates/reads `.faudit.json`)
 
+All `pdfx` kernel commands and runner invocations run inside this repo's producer Python project environment: `uv run --project "<pdf-processing-core project root>" --locked ...`. The project root is the installation of this repo that contains `pyproject.toml` (naming `pdf-processing-core`) and `uv.lock` — in an APM consumer `<consumer root>/apm_modules/ScholarWorkflow/pdf-processing-core/`, in a direct checkout the checkout root itself. Resolve it once per session from the known locations; never recursively search caller-owned directories to find it.
+
 For each resolved paired PDF:
 
 ```bash
-pdfx formula-audit "<pdf>" --extraction-dir "<source_root or omit>" --project
+uv run --project "<pdf-processing-core project root>" --locked pdfx formula-audit "<pdf>" --extraction-dir "<source_root or omit>" --project
 ```
 
 - `--project` writes the aggregate audit projection in the source document metadata (idempotently).
@@ -79,7 +81,7 @@ For each source unit:
 Pending L3 regions on a trusted or washable text layer are never sent directly to whole-page OCR. Run the lightweight triage:
 
 ```bash
-pdfx formula-l3-plan "<pdf>" --text-layer trusted
+uv run --project "<pdf-processing-core project root>" --locked pdfx formula-l3-plan "<pdf>" --text-layer trusted
 ```
 
 - `eligible: false` -> skip triage; normal repair handles those regions.
@@ -93,13 +95,13 @@ pdfx formula-l3-plan "<pdf>" --text-layer trusted
 
 ### Step 3 — create or recover small jobs
 
-Use the repository-owned runner through the public runtime entry point:
+Use the repository-owned runner inside the producer Python project environment resolved in Step 1:
 
 ```bash
-skillrepo exec pdf-processing-core .apm/skills/formula-repair/formula_repair_runner.py
+uv run --project "<pdf-processing-core project root>" --locked python "<pdf-processing-core project root>/.apm/skills/formula-repair/formula_repair_runner.py" <subcommand> ...
 ```
 
-In a runtime without a `skillrepo` launcher (for example a Codex session in a clean APM consumer), execute the same repository-owned runner from this repo's installed APM module source instead: `<consumer root>/apm_modules/ScholarWorkflow/pdf-processing-core/.apm/skills/formula-repair/formula_repair_runner.py`. The runners resolve this repo's own `lib/pdfx` tooling relative to their own location, so this module-source copy is the only location that keeps the repository topology they require; the relocated `.agents/skills/formula-repair/` deployment is a file projection and must not be executed directly. Never substitute a different runner.
+When APM has deployed this repo, the same repository-owned runner file also exists at the deployed skill location `<consumer root>/.agents/skills/formula-repair/formula_repair_runner.py` and executes identically under the same producer project environment — script location does not change which `pdfx` runs. Never substitute a different runner.
 
 - One PDF job has at most 12 page units or 20 region units; auxiliary-source jobs have at most 8 pages.
 - The runner writes `<source_root>/.formula-repair-state.json` and transient `.ocr_units/` files.
@@ -158,7 +160,7 @@ The runner collects result files. It may atomically merge a source only after ev
 After the repair skill reports its completion marker, re-run:
 
 ```bash
-pdfx formula-audit "<paired PDF>" --force --project
+uv run --project "<pdf-processing-core project root>" --locked pdfx formula-audit "<paired PDF>" --force --project
 ```
 
 The source verdict must be `ok`. If not, retry failed units up to `max_retries`; exhausted work is `degraded`, never repaired.

@@ -32,10 +32,10 @@ The goal is for every repaired page to match the paired PDF, with formulas repre
 
 ### Layer 1: quality tiers
 
-Run the shared `pdfx` kernel:
+Run the shared `pdfx` kernel. All `pdfx` kernel commands and runner invocations run inside this repo's producer Python project environment (`uv run --project "<pdf-processing-core project root>" --locked ...`); the project root is the installation of this repo containing `pyproject.toml` (naming `pdf-processing-core`) and `uv.lock` — in an APM consumer `<consumer root>/apm_modules/ScholarWorkflow/pdf-processing-core/`, in a direct checkout the checkout root itself. Never recursively search caller-owned directories to find it.
 
 ```bash
-pdfx quality "<paired PDF absolute path>" --json
+uv run --project "<pdf-processing-core project root>" --locked pdfx quality "<paired PDF absolute path>" --json
 ```
 
 Use the per-page tier and image count to create page units:
@@ -54,7 +54,7 @@ Thresholds and tier definitions belong to the installable `pdfx` quality package
 For ambiguous plain-text mathematics, run:
 
 ```bash
-pdfx scan-math "<source document absolute path>" --pdf "<paired PDF absolute path>" --json
+uv run --project "<pdf-processing-core project root>" --locked pdfx scan-math "<source document absolute path>" --pdf "<paired PDF absolute path>" --json
 ```
 
 The kernel performs ambiguity scanning, maps hits to physical pages, and emits region units or page upgrades. Existing LaTeX-delimited spans are protected. If no paired PDF exists, process all hits as page units.
@@ -90,15 +90,15 @@ State the separation clearly: the integrated refresh route and the formula-repai
 
    The refresh runner consumes this file. It does not recalculate or overwrite quality, semantic-audit, formula-audit, or pending-L3 decisions.
 
-2. Run the batch:
+2. Run the batch inside the producer Python project environment defined above:
 
    ```bash
-   skillrepo exec pdf-processing-core .apm/skills/llm-ocr-refresh/ocr_refresh_jobs.py run \
+   uv run --project "<pdf-processing-core project root>" --locked python "<pdf-processing-core project root>/.apm/skills/llm-ocr-refresh/ocr_refresh_jobs.py" run \
      --target "<source document or paired source>" --pdf "<paired PDF>" \
      --units "<repair_units.json>" --state "<source>.ocr_repair_state.json"
    ```
 
-   In a runtime without a `skillrepo` launcher (for example a Codex session in a clean APM consumer), execute the same repository-owned runner from this repo's installed APM module source instead: `<consumer root>/apm_modules/ScholarWorkflow/pdf-processing-core/.apm/skills/llm-ocr-refresh/ocr_refresh_jobs.py`. The runners resolve this repo's own `lib/pdfx` tooling relative to their own location, so this module-source copy is the only location that keeps the repository topology they require; the relocated `.agents/skills/llm-ocr-refresh/` deployment is a file projection and must not be executed directly. Never substitute a different runner.
+   When APM has deployed this repo, the same repository-owned runner file also exists at the deployed skill location `<consumer root>/.agents/skills/llm-ocr-refresh/ocr_refresh_jobs.py` and executes identically under the same producer project environment — script location does not change which `pdfx` runs. Never substitute a different runner.
 
    Page units render the full page with the standard PDF render transform. Region units expand the supplied `bbox_pt` by the documented margin and render only that clip. Matching unit keys, image hashes, and render parameters reuse existing images. The runner writes images, OCR results, and result JSON below `<source_root>/.ocr_units/`; the parent process alone writes state atomically.
 
@@ -107,7 +107,7 @@ State the separation clearly: the integrated refresh route and the formula-repai
 4. After all mandatory units have acceptable results, submit an acceptance plan:
 
    ```bash
-   skillrepo exec pdf-processing-core .apm/skills/llm-ocr-refresh/ocr_refresh_jobs.py finalize \
+   uv run --project "<pdf-processing-core project root>" --locked python "<pdf-processing-core project root>/.apm/skills/llm-ocr-refresh/ocr_refresh_jobs.py" finalize \
      --state "<state>" --accept "<accept_plan.json>"
    ```
 
