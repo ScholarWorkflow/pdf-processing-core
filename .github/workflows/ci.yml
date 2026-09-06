@@ -12,10 +12,16 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           version: latest
-      - name: Run tests
-        run: uv run --with pytest,pymupdf pytest -q lib/pdfx .apm/skills/formula-repair/tests .apm/skills/llm-ocr-refresh/tests test
+      - name: Run tests in the producer project environment
+        run: |
+          uv sync --locked --group dev
+          uv run --locked --group dev pytest -q lib/pdfx .apm/skills/formula-repair/tests .apm/skills/llm-ocr-refresh/tests test
       - name: Check package imports
-        run: uv run python -c "import pdfx; import pdfx.quality; import pdfx.extract; import pdfx.status"
+        run: uv run --locked python -c "import pdfx; import pdfx.quality; import pdfx.extract; import pdfx.status"
+      - name: CLI smoke checks
+        run: |
+          uv run --locked pdfx --help >/dev/null
+          uv run --locked pdfx quality --help >/dev/null
       - name: Check installed CLI outside checkout
         run: |
           uv tool install --editable . --force

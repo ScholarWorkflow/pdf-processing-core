@@ -12,10 +12,14 @@ discover and run this repo's agents after that lossy conversion:
 - agent frontmatter/identity stays well-formed for both harnesses;
 - the conventions Codex needs (internal-only, no-spawn) live in the BODY,
   because the frontmatter that used to carry them is dropped;
-- every `skillrepo exec` runtime entry point resolves to an existing producer
-  skill file, and the installed-module-source resolution rule accompanies it
-  (the runners resolve `lib/pdfx` relative to their own location, so the
-  relocated `.agents/skills/` deployment is not an execution route);
+- every doc surface that consumes this repo's package expresses the runtime as
+  the producer uv project contract (`uv run --project "<pdf-processing-core
+  project root>" --locked ...`) with the APM producer-root resolution, and no
+  surface injects dependencies ad hoc (`--with pymupdf`) or demotes the
+  deployed `.agents/skills/` copy to a non-executable projection;
+- the Python project contract that makes the installed-package route real:
+  `pyproject.toml` (project name, `lib/pdfx` wheel package, `pdfx.cli:main`
+  entry point, `PyMuPDF` dependency) plus a committed `uv.lock`;
 - skill metadata claims both harnesses;
 - `apm.yml` keeps both targets and declares no MCP (producers never do);
 - the OpenCode permission semantics are preserved unchanged (no widening);
@@ -29,6 +33,7 @@ consumer fails in CI without needing an install.
 from __future__ import annotations
 
 import re
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -55,13 +60,31 @@ CONSUMER_TOOLING_MARKERS = (
     "codex-runtime-acceptance",
 )
 
-SKILLREPO_CALL_RE = re.compile(r"skillrepo exec pdf-processing-core (\S+)")
-
-# Where APM clones this repo's module source inside a consumer; the runners
-# resolve the repo's own lib/pdfx tooling relative to their own location, so
-# this copy — not the relocated `.agents/skills/` file projection — is the
-# executable no-launcher route (see test_codex_runner_relocation.py).
+# Where APM clones this repo's producer project inside a consumer; this is the
+# producer project root resolution every runtime doc surface must carry.
 MODULE_SOURCE_ROUTE = "apm_modules/ScholarWorkflow/pdf-processing-core/"
+
+# The runtime boundary for repo-owned Python work, identical in both harnesses:
+# the producer project environment (APM deploys files; Python dependencies come
+# from pyproject.toml/uv.lock, not from script location or ad hoc injection).
+UV_PROJECT_CONTRACT = 'uv run --project "<pdf-processing-core project root>" --locked'
+
+# Doc surfaces that consume this repo's own package at runtime. pdf-to-text is
+# deliberately excluded: its conversion command is a consumer-owned contract.
+PRODUCER_RUNTIME_DOC_SURFACES = (
+    AGENTS_DIR / "formula-repair.agent.md",
+    SKILLS_DIR / "formula-repair" / "SKILL.md",
+    SKILLS_DIR / "llm-ocr-refresh" / "SKILL.md",
+    ROOT / "CODEX-COMPATIBILITY.md",
+)
+
+# The repo-owned runner scripts, which must be plain consumers of the
+# installed package (see test_codex_runner_relocation.py for the execution
+# proof against a simulated clean consumer).
+RUNNER_FILES = (
+    SKILLS_DIR / "formula-repair" / "formula_repair_runner.py",
+    SKILLS_DIR / "llm-ocr-refresh" / "ocr_refresh_jobs.py",
+)
 
 
 def _parse_scalar(value: str) -> str | bool:
@@ -224,24 +247,51 @@ def test_hidden_internal_only_contract_fails_when_convention_removed():
 # --------------------------------------------------------------------------- runtime entry points
 
 
-def test_skillrepo_call_sites_resolve_to_producer_skill_files():
-    call_sites: list[tuple[Path, str]] = []
-    for path in (*sorted(AGENTS_DIR.glob("*.agent.md")), *sorted(SKILLS_DIR.glob("*/SKILL.md"))):
-        for resource in SKILLREPO_CALL_RE.findall(path.read_text(encoding="utf-8")):
-            call_sites.append((path, resource))
-    assert call_sites, "runtime entry points disappeared from agents/skills"
+def test_python_project_contract_pins_installed_package_route():
+    """The installed-package route is only real if the repo stays a normal
+    Python project: name, wheel package, console entry, runtime dependency,
+    and the committed lockfile that `uv run --project ... --locked` relies on."""
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert pyproject["project"]["name"] == "pdf-processing-core"
+    assert pyproject["project"]["scripts"]["pdfx"] == "pdfx.cli:main"
+    assert any(dep.startswith("PyMuPDF") for dep in pyproject["project"]["dependencies"]), (
+        "PyMuPDF must stay a declared runtime dependency of the package"
+    )
+    assert "lib/pdfx" in pyproject["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"]
+    assert (ROOT / "uv.lock").is_file(), "uv.lock is the committed producer environment contract"
 
-    for path, resource in call_sites:
-        assert resource.startswith(".apm/skills/"), f"{path}: call site {resource!r} not a skill resource"
-        skill = resource.split("/")[2]
-        producer_file = ROOT / resource
-        assert producer_file.is_file(), f"{path}: call site target {resource} missing in producer repo"
-        assert (SKILLS_DIR / skill).is_dir(), f"{path}: skill dir {skill} missing"
 
-        assert MODULE_SOURCE_ROUTE in path.read_text(encoding="utf-8"), (
-            f"{path}: call site {resource} lacks the installed-module-source "
-            "resolution rule needed in a clean Codex consumer"
+def test_producer_runtime_docs_use_uv_project_contract():
+    """Every surface that consumes this repo's package must express the
+    runtime as the producer project environment — never a launcher route, ad
+    hoc dependency injection, or a 'deployment is not executable' claim."""
+    for surface in PRODUCER_RUNTIME_DOC_SURFACES:
+        text = surface.read_text(encoding="utf-8")
+        assert UV_PROJECT_CONTRACT in text, (
+            f"{surface.name}: missing the producer uv project contract"
         )
+        assert MODULE_SOURCE_ROUTE in text, (
+            f"{surface.name}: missing the APM producer project root resolution"
+        )
+        assert "skillrepo exec" not in text, (
+            f"{surface.name}: the launcher route must not come back as a "
+            "second dependency model"
+        )
+        assert "--with pymupdf" not in text, (
+            f"{surface.name}: dependencies must not be injected ad hoc"
+        )
+        assert "must not be executed" not in text, (
+            f"{surface.name}: the deployed skill copy is an execution route "
+            "under the producer project environment"
+        )
+
+
+def test_runners_are_plain_consumers_of_the_installed_package():
+    for runner in RUNNER_FILES:
+        text = runner.read_text(encoding="utf-8")
+        assert "sys.path.insert" not in text, f"{runner.name}: source-tree sys.path shim"
+        assert "--with pymupdf" not in text, f"{runner.name}: ad hoc dependency injection"
+        assert "cli.py" not in text, f"{runner.name}: source-tree cli.py resolution"
 
 
 def test_skill_frontmatter_claims_both_harnesses():
