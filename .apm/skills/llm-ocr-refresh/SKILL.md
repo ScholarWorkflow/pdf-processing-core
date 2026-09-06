@@ -98,7 +98,7 @@ State the separation clearly: the integrated refresh route and the formula-repai
      --units "<repair_units.json>" --state "<source>.ocr_repair_state.json"
    ```
 
-   In a runtime without a `skillrepo` launcher (for example a Codex session in a clean APM consumer), execute the same repository-owned runner from its deployed skill location instead: `<consumer root>/.agents/skills/llm-ocr-refresh/ocr_refresh_jobs.py`, where `.agents/skills/llm-ocr-refresh/` is the APM deployment of this repo's `.apm/skills/llm-ocr-refresh/`. Never substitute a different runner.
+   In a runtime without a `skillrepo` launcher (for example a Codex session in a clean APM consumer), execute the same repository-owned runner from this repo's installed APM module source instead: `<consumer root>/apm_modules/ScholarWorkflow/pdf-processing-core/.apm/skills/llm-ocr-refresh/ocr_refresh_jobs.py`. The runners resolve this repo's own `lib/pdfx` tooling relative to their own location, so this module-source copy is the only location that keeps the repository topology they require; the relocated `.agents/skills/llm-ocr-refresh/` deployment is a file projection and must not be executed directly. Never substitute a different runner.
 
    Page units render the full page with the standard PDF render transform. Region units expand the supplied `bbox_pt` by the documented margin and render only that clip. Matching unit keys, image hashes, and render parameters reuse existing images. The runner writes images, OCR results, and result JSON below `<source_root>/.ocr_units/`; the parent process alone writes state atomically.
 

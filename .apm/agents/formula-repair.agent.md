@@ -99,7 +99,7 @@ Use the repository-owned runner through the public runtime entry point:
 skillrepo exec pdf-processing-core .apm/skills/formula-repair/formula_repair_runner.py
 ```
 
-In a runtime without a `skillrepo` launcher (for example a Codex session in a clean APM consumer), execute the same repository-owned runner from its deployed skill location instead: `<consumer root>/.agents/skills/formula-repair/formula_repair_runner.py`, where `.agents/skills/formula-repair/` is the APM deployment of this repo's `.apm/skills/formula-repair/`. Never substitute a different runner.
+In a runtime without a `skillrepo` launcher (for example a Codex session in a clean APM consumer), execute the same repository-owned runner from this repo's installed APM module source instead: `<consumer root>/apm_modules/ScholarWorkflow/pdf-processing-core/.apm/skills/formula-repair/formula_repair_runner.py`. The runners resolve this repo's own `lib/pdfx` tooling relative to their own location, so this module-source copy is the only location that keeps the repository topology they require; the relocated `.agents/skills/formula-repair/` deployment is a file projection and must not be executed directly. Never substitute a different runner.
 
 - One PDF job has at most 12 page units or 20 region units; auxiliary-source jobs have at most 8 pages.
 - The runner writes `<source_root>/.formula-repair-state.json` and transient `.ocr_units/` files.

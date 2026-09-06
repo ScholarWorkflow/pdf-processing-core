@@ -10,6 +10,9 @@ on any consumer-side migration tooling.
 
 `apm install --target codex` deploys:
 
+- the module source itself, cloned under
+  `apm_modules/ScholarWorkflow/pdf-processing-core/` (verified against
+  APM 0.29.0 with this repo);
 - one `.codex/agents/<name>.toml` per `.apm/agents/*.agent.md`, converting
   exactly the `name`, `description`, and body (as `developer_instructions`);
   every other frontmatter key is dropped;
@@ -27,13 +30,19 @@ agent convention this repo needs is carried by the agent body itself:
 | `hidden: true` | "Internal-only agent ... orchestration convention, not a security boundary." |
 | `permission.task` absent or `deny` | "Do not spawn sub-agents (no task calls)." |
 | `permission.task: allow` | (no restriction line; the agent may spawn its documented worker) |
-| `skillrepo exec ...` call site | same call site, plus the deployed-skill-path resolution rule |
+| `skillrepo exec ...` call site | same call site, plus the installed-module-source resolution rule |
 
 The runtime entry points referenced as `skillrepo exec pdf-processing-core
 .apm/skills/...` stay canonical for OpenCode. Each call site also states the
 harness-neutral resolution used when no `skillrepo` launcher exists: execute
-the same repository-owned file from its APM deployment location
-(`<consumer root>/.agents/skills/<skill>/...`).
+the same repository-owned file from this repo's installed module source
+(`<consumer root>/apm_modules/ScholarWorkflow/pdf-processing-core/.apm/skills/<skill>/...`).
+The skill runners resolve this repo's own `lib/pdfx` tooling relative to their
+own location, so only the module-source copy keeps the repository topology
+they require; the relocated `.agents/skills/` deployment is a file projection
+and not an execution route. `test/test_codex_runner_relocation.py` pins this
+against a simulated clean consumer and exercises both runners through the
+documented route.
 
 ## Recorded limitations (Codex CLI 0.153.x)
 
@@ -72,4 +81,7 @@ identity, body-carried conventions that must survive the lossy conversion,
 runtime entry points resolving to existing producer skill files, the
 harness-neutral skill metadata, the both-targets `apm.yml` with no producer
 MCP declarations, and the absence of any consumer-runtime dependency in the
-runtime surfaces.
+runtime surfaces. `test/test_codex_runner_relocation.py` builds a simulated
+clean consumer (module source under `apm_modules/`, verbatim skill deployment
+under `.agents/skills/`) and proves that the documented no-launcher route
+executes both runners for real, while the relocated deployment cannot.

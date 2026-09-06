@@ -13,7 +13,9 @@ discover and run this repo's agents after that lossy conversion:
 - the conventions Codex needs (internal-only, no-spawn) live in the BODY,
   because the frontmatter that used to carry them is dropped;
 - every `skillrepo exec` runtime entry point resolves to an existing producer
-  skill file, and the deployed-path resolution rule accompanies it;
+  skill file, and the installed-module-source resolution rule accompanies it
+  (the runners resolve `lib/pdfx` relative to their own location, so the
+  relocated `.agents/skills/` deployment is not an execution route);
 - skill metadata claims both harnesses;
 - `apm.yml` keeps both targets and declares no MCP (producers never do);
 - the OpenCode permission semantics are preserved unchanged (no widening);
@@ -55,11 +57,21 @@ CONSUMER_TOOLING_MARKERS = (
 
 SKILLREPO_CALL_RE = re.compile(r"skillrepo exec pdf-processing-core (\S+)")
 
+# Where APM clones this repo's module source inside a consumer; the runners
+# resolve the repo's own lib/pdfx tooling relative to their own location, so
+# this copy — not the relocated `.agents/skills/` file projection — is the
+# executable no-launcher route (see test_codex_runner_relocation.py).
+MODULE_SOURCE_ROUTE = "apm_modules/ScholarWorkflow/pdf-processing-core/"
 
-def _parse_scalar(value: str) -> str:
+
+def _parse_scalar(value: str) -> str | bool:
     value = value.strip()
     if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
         return value[1:-1]
+    if value == "true":
+        return True
+    if value == "false":
+        return False
     return value
 
 
@@ -164,6 +176,21 @@ def test_opencode_permission_semantics_unchanged_and_not_widened():
             assert permission.get("task") != "allow", f"{name}: task grant reappeared"
 
 
+def codex_body_convention_violations(fm: dict, body: str) -> list[str]:
+    """Body conventions Codex needs after the frontmatter drop, as explicit
+    violations so tests can also assert the checks fire (not just pass)."""
+    violations: list[str] = []
+    if fm.get("hidden") is True:
+        if "Internal-only agent" not in body:
+            violations.append("hidden agent lacks the internal-only convention")
+        if "orchestration convention, not a security boundary" not in body:
+            violations.append("internal-only convention must stay explicitly non-ACL")
+    if fm.get("permission", {}).get("task") != "allow":
+        if "Do not spawn sub-agents" not in body:
+            violations.append("task-denied agent lacks the no-spawn convention")
+    return violations
+
+
 def test_codex_conversion_survival_contract():
     """After APM drops the frontmatter, the deployed developer_instructions is
     the ONLY carrier of agent semantics. Every convention Codex needs must
@@ -171,15 +198,27 @@ def test_codex_conversion_survival_contract():
     for name, (fm, body) in agent_sources().items():
         developer_instructions = body[1:] if body.startswith("\n") else body
         assert developer_instructions.strip(), f"{name}: body empty after conversion strip"
-        if fm.get("hidden") is True:
-            assert "Internal-only agent" in body, f"{name}: hidden agent lacks the internal-only convention"
-            assert "orchestration convention, not a security boundary" in body, (
-                f"{name}: internal-only convention must stay explicitly non-ACL"
-            )
-        if fm.get("permission", {}).get("task") != "allow":
-            assert "Do not spawn sub-agents" in body, (
-                f"{name}: task-denied agent lacks the no-spawn convention"
-            )
+        violations = codex_body_convention_violations(fm, body)
+        assert not violations, f"{name}: {violations}"
+
+
+def test_hidden_internal_only_contract_fails_when_convention_removed():
+    """The hidden branch in codex_body_convention_violations must be live
+    code: a hidden agent whose body drops the internal-only convention has to
+    be reported, proving the assertion is actually exercised."""
+    hidden = {
+        name: (fm, body)
+        for name, (fm, body) in agent_sources().items()
+        if fm.get("hidden") is True
+    }
+    assert hidden, "no hidden: true agent found; the internal-only contract is untested"
+    for name, (fm, body) in hidden.items():
+        stripped = body.replace("Internal-only agent", "[convention removed]", 1)
+        assert stripped != body, f"{name}: expected to strip the convention sentence"
+        violations = codex_body_convention_violations(fm, stripped)
+        assert any("internal-only" in v for v in violations), (
+            f"{name}: dropping the internal-only convention was not reported"
+        )
 
 
 # --------------------------------------------------------------------------- runtime entry points
@@ -199,9 +238,8 @@ def test_skillrepo_call_sites_resolve_to_producer_skill_files():
         assert producer_file.is_file(), f"{path}: call site target {resource} missing in producer repo"
         assert (SKILLS_DIR / skill).is_dir(), f"{path}: skill dir {skill} missing"
 
-        deployed_resolution = f".agents/skills/{skill}/"
-        assert deployed_resolution in path.read_text(encoding="utf-8"), (
-            f"{path}: call site {resource} lacks the .agents/skills/ deployed-path "
+        assert MODULE_SOURCE_ROUTE in path.read_text(encoding="utf-8"), (
+            f"{path}: call site {resource} lacks the installed-module-source "
             "resolution rule needed in a clean Codex consumer"
         )
 
