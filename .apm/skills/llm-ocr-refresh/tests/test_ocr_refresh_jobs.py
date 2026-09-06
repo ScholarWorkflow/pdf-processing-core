@@ -28,8 +28,6 @@ R = importlib.util.module_from_spec(SPEC)
 assert SPEC and SPEC.loader
 SPEC.loader.exec_module(R)
 
-READ_STATUS = Path(__file__).resolve().parents[4] / "lib" / "pdfx" / "read_status.py"
-
 FAKE_GLANCE = r'''
 import json, os, sys, time
 from pathlib import Path
@@ -348,7 +346,7 @@ class RFixture(unittest.TestCase):
             ], stdout=subprocess.DEVNULL, stderr=handle, env=env)
         self.assertEqual(proc.returncode, 0)
         poll = subprocess.run(
-            [sys.executable, str(READ_STATUS), str(log)],
+            [sys.executable, "-m", "pdfx.read_status", str(log)],
             capture_output=True, text=True,
         )
         line = poll.stdout.strip()
@@ -575,6 +573,27 @@ class RFixture(unittest.TestCase):
             (root / "p1" / "attempt1.ocr.md").read_text(),
             (root / "p2" / "attempt1.ocr.md").read_text(),
         )
+
+    def test_runner_starts_without_sys_path_topology_shim(self):
+        """Package-first contract: inside the producer project environment the
+        runner must import `pdfx.status` normally and must not mutate
+        `sys.path` to reach a source-tree `lib/` directory."""
+        probe = subprocess.run(
+            [sys.executable, "-c", "\n".join([
+                "import importlib.util, sys",
+                "before = list(sys.path)",
+                f"spec = importlib.util.spec_from_file_location('ocr_refresh_jobs_probe', {str(R_PATH)!r})",
+                "module = importlib.util.module_from_spec(spec)",
+                "spec.loader.exec_module(module)",
+                "added = [p for p in sys.path if p not in before]",
+                "assert not added, f'sys.path was mutated: {added}'",
+                "import pdfx.status",
+                "print('ok')",
+            ])],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(probe.returncode, 0, probe.stderr)
+        self.assertEqual(probe.stdout.strip(), "ok")
 
 
 if __name__ == "__main__":

@@ -251,12 +251,9 @@ def _normalize_patch_offset(source_bytes: bytes, value: int) -> int:
 
 
 def _audit_command(pdf: Path, source: Path, textbook: bool) -> list[str]:
-    """Use the established pdfx environment; no caller assembles shell text."""
-    repo_cli = Path(__file__).resolve().parents[3] / "lib" / "pdfx" / "cli.py"
-    if not repo_cli.is_file():
-        raise ValueError(f"repo-local pdfx CLI not found: {repo_cli}")
-    cli = repo_cli
-    command = ["uv", "run", "--with", "pymupdf", "python3", str(cli), "formula-audit", str(pdf), "--force"]
+    """Audit in this runner's own interpreter; pdfx comes from the producer
+    uv project environment the runner was started in, never a source-tree path."""
+    command = [sys.executable, "-m", "pdfx.cli", "formula-audit", str(pdf), "--force"]
     if textbook:
         command.extend(["--extraction-dir", str(source.parents[2]), "--project"])
     return command

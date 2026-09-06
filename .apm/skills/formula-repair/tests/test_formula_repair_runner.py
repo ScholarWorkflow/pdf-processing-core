@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from argparse import Namespace
@@ -367,11 +369,11 @@ class FormulaRepairRunnerTest(unittest.TestCase):
         self.assertEqual(summary["job_counts"], {"pending": 1})
         self.assertNotIn("jobs", summary)
 
-    def test_audit_command_uses_repo_local_cli(self):
+    def test_audit_command_uses_running_interpreter_and_installed_package(self):
         command = runner._audit_command(self.pdf, self.source, False)
-        cli_args = [item for item in command if item.endswith("lib/pdfx/cli.py")]
-        self.assertEqual(len(cli_args), 1)
-        self.assertNotIn("opencode", cli_args[0])
+        self.assertEqual(command[:3], [sys.executable, "-m", "pdfx.cli"])
+        self.assertTrue(all(not item.endswith("cli.py") for item in command),
+                        f"audit command must not reference a source-tree cli.py: {command}")
 
     def test_partial_worker_result_retries_only_failed_members(self):
         self._faudit({str(i): {"page_verdict": "unverified", "verdicts": []} for i in range(1, 4)})
@@ -402,12 +404,32 @@ class FormulaRepairRunnerTest(unittest.TestCase):
         updated = runner._load_state(self.root)["jobs"][job["job_id"]]
         self.assertEqual((updated["status"], updated["attempts"]), ("pending", 0))
 
-    def test_standard_audit_command_uses_uv_and_correct_extraction_root(self):
+    def test_standard_audit_command_uses_same_interpreter_and_correct_extraction_root(self):
         textbook_source = Path("/tmp/book/extraction/chapter/section/text.md")
         command = runner._audit_command(Path("/tmp/book/split_pdfs/section.pdf"), textbook_source, True)
-        self.assertEqual(command[:5], ["uv", "run", "--with", "pymupdf", "python3"])
+        self.assertEqual(command[:3], [sys.executable, "-m", "pdfx.cli"])
         self.assertIn("--extraction-dir", command)
         self.assertIn("/tmp/book/extraction", command)
+
+    def test_audit_command_executes_real_post_merge_audit(self):
+        """The assembled command must run the installed pdfx package in this
+        interpreter — the exact post-merge dependency path finalize relies on —
+        and produce the `.faudit.json` sidecar it is verified against."""
+        import pymupdf
+
+        doc = pymupdf.open()
+        page = doc.new_page()
+        page.insert_text((72, 100), "The quadratic formula gives roots of ax^2+bx+c=0.")
+        page.insert_text((72, 140), "Plain narrative text follows here for extraction.")
+        pdf = self.root / "audit-probe.pdf"
+        doc.save(str(pdf))
+        doc.close()
+
+        command = runner._audit_command(pdf, pdf, False)
+        completed = subprocess.run(command, capture_output=True, text=True, cwd=self.root)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertTrue(pdf.with_suffix(".faudit.json").is_file(),
+                        "audit command did not create the .faudit.json sidecar")
 
     def test_status_reports_completed_job_elapsed_time_only(self):
         self._faudit({"1": {"page_verdict": "unverified", "verdicts": []}})
