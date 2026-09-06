@@ -1,7 +1,7 @@
 ---
 name: formula-repair
 description: Formula correctness repair orchestrator. Runs audit -> repair -> verification, refuses to release non-ok regions, and supports caller-provided batch manifests. The refresh skill is the only repairer.
-compatibility: opencode
+compatibility: opencode, codex
 license: MIT
 metadata:
   author: custom
@@ -82,6 +82,8 @@ Invoke the repository-owned runner through the public runtime entry point:
 ```bash
 skillrepo exec pdf-processing-core .apm/skills/formula-repair/formula_repair_runner.py
 ```
+
+In a runtime without a `skillrepo` launcher (for example a Codex session in a clean APM consumer), execute the same repository-owned runner from its deployed skill location instead: `<consumer root>/.agents/skills/formula-repair/formula_repair_runner.py`, where `.agents/skills/formula-repair/` is the APM deployment of this repo's `.apm/skills/formula-repair/`. Never substitute a different runner.
 
 The refresh skill's unit-worker mode reads job JSON, uses the configured visual-OCR provider abstraction, writes unit results, and never writes source documents, audit sidecars, manifests, or downstream indexes. A worker does not choose a provider or model.
 

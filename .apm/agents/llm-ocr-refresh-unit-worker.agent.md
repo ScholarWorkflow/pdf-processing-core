@@ -18,6 +18,8 @@ permission:
 
 You process exactly one formula-repair `unit-job` JSON. Load `llm-ocr-refresh` and the registered visual-OCR capability; reuse their existing OCR path, `[?]` safeguard, auxiliary-source checks, and formula-verification rules. Do not invent provider settings, select models, or call another agent.
 
+Internal-only agent: you exist to be spawned by your parent workflow step and must not be invoked ad hoc. This is an orchestration convention, not a security boundary. Do not spawn sub-agents (no task calls).
+
 ## Input
 
 The prompt gives one absolute `job.json` path. Read it. It contains a paired PDF, source document, source SHA-256, page or bbox members, `unit_dir`, and optional auxiliary-source or caller metadata.

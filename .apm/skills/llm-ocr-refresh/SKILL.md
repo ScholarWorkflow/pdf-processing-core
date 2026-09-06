@@ -1,7 +1,7 @@
 ---
 name: llm-ocr-refresh
 description: Refreshes unreliable PDF-derived source documents. Quality audits and math scanning identify mandatory page or region units; a configured visual-OCR provider chain repairs only those units and atomically writes back clean text and LaTeX. Supports caller metadata and optional auxiliary sources.
-compatibility: opencode
+compatibility: opencode, codex
 license: MIT
 metadata:
   author: custom
@@ -97,6 +97,8 @@ State the separation clearly: the integrated refresh route and the formula-repai
      --target "<source document or paired source>" --pdf "<paired PDF>" \
      --units "<repair_units.json>" --state "<source>.ocr_repair_state.json"
    ```
+
+   In a runtime without a `skillrepo` launcher (for example a Codex session in a clean APM consumer), execute the same repository-owned runner from its deployed skill location instead: `<consumer root>/.agents/skills/llm-ocr-refresh/ocr_refresh_jobs.py`, where `.agents/skills/llm-ocr-refresh/` is the APM deployment of this repo's `.apm/skills/llm-ocr-refresh/`. Never substitute a different runner.
 
    Page units render the full page with the standard PDF render transform. Region units expand the supplied `bbox_pt` by the documented margin and render only that clip. Matching unit keys, image hashes, and render parameters reuse existing images. The runner writes images, OCR results, and result JSON below `<source_root>/.ocr_units/`; the parent process alone writes state atomically.
 
