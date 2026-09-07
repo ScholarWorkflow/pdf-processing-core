@@ -14,6 +14,10 @@ jobs:
           version: latest
       - name: Run tests
         run: uv run --with pytest,pymupdf pytest -q lib/pdfx .apm/skills/formula-repair/tests .apm/skills/llm-ocr-refresh/tests test
+      - name: Build root compatibility project
+        run: |
+          rm -rf "$RUNNER_TEMP/pdf-processing-core-dist"
+          uv build . --out-dir "$RUNNER_TEMP/pdf-processing-core-dist"
       - name: Stage release package
         run: uv run --no-project python scripts/stage_release_package.py "$RUNNER_TEMP/scholar-workflow-pdfx-stage"
       - name: Build release artifacts
@@ -25,8 +29,9 @@ jobs:
         run: |
           wheel_env="$RUNNER_TEMP/scholar-workflow-pdfx-wheel-env"
           uv venv "$wheel_env"
-          uv pip install --python "$wheel_env/bin/python" \
-            "$RUNNER_TEMP/scholar-workflow-pdfx-dist"/scholar_workflow_pdfx-*.whl
+          wheels=("$RUNNER_TEMP"/scholar-workflow-pdfx-dist/scholar_workflow_pdfx-*.whl)
+          test "${#wheels[@]}" -eq 1 && test -f "${wheels[0]}"
+          uv pip install --python "$wheel_env/bin/python" "${wheels[0]}"
           mkdir -p "$RUNNER_TEMP/scholar-workflow-pdfx-wheel-check"
           cd "$RUNNER_TEMP/scholar-workflow-pdfx-wheel-check"
           unset PYTHONPATH
@@ -37,8 +42,9 @@ jobs:
         run: |
           sdist_env="$RUNNER_TEMP/scholar-workflow-pdfx-sdist-env"
           uv venv "$sdist_env"
-          uv pip install --python "$sdist_env/bin/python" \
-            "$RUNNER_TEMP/scholar-workflow-pdfx-dist"/scholar_workflow_pdfx-0.1.0.tar.gz
+          sdists=("$RUNNER_TEMP"/scholar-workflow-pdfx-dist/scholar_workflow_pdfx-*.tar.gz)
+          test "${#sdists[@]}" -eq 1 && test -f "${sdists[0]}"
+          uv pip install --python "$sdist_env/bin/python" "${sdists[0]}"
           mkdir -p "$RUNNER_TEMP/scholar-workflow-pdfx-sdist-check"
           cd "$RUNNER_TEMP/scholar-workflow-pdfx-sdist-check"
           unset PYTHONPATH
