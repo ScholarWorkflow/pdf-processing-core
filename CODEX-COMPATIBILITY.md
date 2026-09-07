@@ -40,8 +40,10 @@ per agent, so no permission is widened to imitate equivalence.
 
 ## Python runtime authority
 
-The repo-owned Python files are PEP 723 scripts. Their inline dependency
-metadata is bounded to the released distribution:
+The repo-owned Python files are PEP 723 scripts. Both use the released
+distribution, and the OCR refresh runner additionally declares its rendering
+dependencies (`pymupdf` and `pillow`) inline so execution does not depend on a
+caller-supplied `--with` overlay:
 
 ```text
 scholar-workflow-pdfx>=0.1.0,<0.2
