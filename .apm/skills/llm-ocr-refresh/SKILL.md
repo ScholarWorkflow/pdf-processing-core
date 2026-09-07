@@ -1,7 +1,7 @@
 ---
 name: llm-ocr-refresh
 description: Refreshes unreliable PDF-derived source documents. Quality audits and math scanning identify mandatory page or region units; a configured visual-OCR provider chain repairs only those units and atomically writes back clean text and LaTeX. Supports caller metadata and optional auxiliary sources.
-compatibility: opencode
+compatibility: opencode, codex
 license: MIT
 metadata:
   author: custom
@@ -93,7 +93,7 @@ State the separation clearly: the integrated refresh route and the formula-repai
 2. Run the batch:
 
    ```bash
-   uv run --script .apm/skills/llm-ocr-refresh/ocr_refresh_jobs.py run \
+   uv run --script "<resolved llm-ocr-refresh skill dir>/ocr_refresh_jobs.py" run \
      --target "<source document or paired source>" --pdf "<paired PDF>" \
      --units "<repair_units.json>" --state "<source>.ocr_repair_state.json"
    ```
@@ -105,7 +105,7 @@ State the separation clearly: the integrated refresh route and the formula-repai
 4. After all mandatory units have acceptable results, submit an acceptance plan:
 
    ```bash
-   uv run --script .apm/skills/llm-ocr-refresh/ocr_refresh_jobs.py finalize \
+   uv run --script "<resolved llm-ocr-refresh skill dir>/ocr_refresh_jobs.py" finalize \
      --state "<state>" --accept "<accept_plan.json>"
    ```
 

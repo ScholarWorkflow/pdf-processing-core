@@ -18,6 +18,8 @@ permission:
 
 You process exactly one formula-repair `unit-job` JSON. Load `llm-ocr-refresh` and the registered visual-OCR capability; reuse their existing OCR path, `[?]` safeguard, auxiliary-source checks, and formula-verification rules. Do not invent provider settings, select models, or call another agent.
 
+Internal-only agent: invoke me only for the unit job assigned by the parent workflow. Do not spawn sub-agents or delegate the unit job. These are orchestration conventions, not ACLs or security boundaries; Codex may not enforce the OpenCode permission map per agent.
+
 ## Input
 
 The prompt gives one absolute `job.json` path. Read it. It contains a paired PDF, source document, source SHA-256, page or bbox members, `unit_dir`, and optional auxiliary-source or caller metadata.
