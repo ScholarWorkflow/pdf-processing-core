@@ -4,6 +4,7 @@
 # dependencies = [
 #   "scholar-workflow-pdfx>=0.1.0,<0.2",
 #   "PyMuPDF>=1.24",
+#   "pillow",
 # ]
 # ///
 """任务 R：llm-ocr-refresh 一体化批量执行脚本。
@@ -18,11 +19,11 @@ T4 短状态（PROGRESS/RESULT/ERROR 写 stderr）、显式 finalization 原子�
 这不是 formula-repair（任务 F）的 unit worker 路线；两条路线并存。
 
 用法：
-  uv run --script .apm/skills/llm-ocr-refresh/ocr_refresh_jobs.py run \
+  uv run --script "<resolved llm-ocr-refresh skill dir>/ocr_refresh_jobs.py" run \
       --target <text.md 或 split md> --pdf <split pdf> \
       --units <repair_units.json> --state <target>.ocr_repair_state.json
 
-  uv run --script .apm/skills/llm-ocr-refresh/ocr_refresh_jobs.py finalize \
+  uv run --script "<resolved llm-ocr-refresh skill dir>/ocr_refresh_jobs.py" finalize \
       --state <state> --accept <accept_plan.json>
 """
 
@@ -245,7 +246,7 @@ def resolve_pdf(path: Path):
     except ImportError as exc:
         raise JobError(
             "pymupdf_missing",
-            "run with: uv run --script .apm/skills/llm-ocr-refresh/ocr_refresh_jobs.py",
+            "the released scholar-workflow-pdfx runtime is unavailable in the PEP 723 environment",
         ) from exc
     try:
         doc = fitz.open(str(path))

@@ -22,6 +22,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from argparse import Namespace
@@ -256,8 +257,8 @@ def _normalize_patch_offset(source_bytes: bytes, value: int) -> int:
 
 
 def _audit_command(pdf: Path, source: Path, textbook: bool) -> list[str]:
-    """Use the established pdfx environment; no caller assembles shell text."""
-    command = ["pdfx", "formula-audit", str(pdf), "--force"]
+    """Run the released pdfx package in this script's PEP 723 environment."""
+    command = [sys.executable, "-m", "pdfx.cli", "formula-audit", str(pdf), "--force"]
     if textbook:
         command.extend(["--extraction-dir", str(source.parents[2]), "--project"])
     return command

@@ -1,7 +1,7 @@
 ---
 name: formula-repair
 description: Formula correctness repair orchestrator. Runs audit -> repair -> verification, refuses to release non-ok regions, and supports caller-provided batch manifests. The refresh skill is the only repairer.
-compatibility: opencode
+compatibility: opencode, codex
 license: MIT
 metadata:
   author: custom
@@ -77,10 +77,10 @@ The runner creates `<source_root>/.formula-repair-state.json` and transient `.oc
 - successful finalization removes OCR unit prose and keeps short state records;
 - interrupted `running` jobs return to `pending` while retaining attempts; the third failure becomes `degraded` and ordinary resume does not reopen it.
 
-Invoke the repository-owned runner through the public runtime entry point:
+Resolve `formula_repair_runner.py` from the loaded/deployed `formula-repair` skill directory and invoke that skill-local PEP 723 script:
 
 ```bash
-uv run --script .apm/skills/formula-repair/formula_repair_runner.py
+uv run --script "<resolved formula-repair skill dir>/formula_repair_runner.py" <subcommand> ...
 ```
 
 The refresh skill's unit-worker mode reads job JSON, uses the configured visual-OCR provider abstraction, writes unit results, and never writes source documents, audit sidecars, manifests, or downstream indexes. A worker does not choose a provider or model.

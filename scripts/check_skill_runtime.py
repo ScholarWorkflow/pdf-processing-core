@@ -6,6 +6,7 @@ import argparse
 import importlib
 import importlib.util
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -16,6 +17,10 @@ def _load_module(name: str, path: Path):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _audit_help_command() -> list[str]:
+    return [sys.executable, "-m", "pdfx.cli", "formula-audit", "--help"]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -49,11 +54,12 @@ def main(argv: list[str] | None = None) -> int:
         Path("/tmp/runtime-check.md"),
         False,
     )
-    if command[:2] != ["pdfx", "formula-audit"]:
+    expected_prefix = [sys.executable, "-m", "pdfx.cli", "formula-audit"]
+    if command[:4] != expected_prefix:
         raise SystemExit(f"unexpected audit command: {command!r}")
     if any("lib/pdfx" in item for item in command):
         raise SystemExit(f"audit command depends on checkout: {command!r}")
-    result = subprocess.run(["pdfx", "formula-audit", "--help"], capture_output=True, text=True)
+    result = subprocess.run(_audit_help_command(), capture_output=True, text=True)
     if result.returncode != 0:
         raise SystemExit(result.stdout + result.stderr)
     return 0
