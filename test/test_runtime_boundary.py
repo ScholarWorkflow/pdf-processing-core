@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
 import re
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -43,6 +46,36 @@ def test_subprocess_pdfx_consumer_has_bounded_pep723_dependency():
     text = runner.read_text(encoding="utf-8")
     assert "formula-audit" in text
     assert RELEASE_DEPENDENCY in _pep723_block(runner)
+
+
+def test_runtime_verifier_accepts_released_module_audit_command():
+    path = ROOT / "scripts/check_skill_runtime.py"
+    spec = importlib.util.spec_from_file_location("check_skill_runtime_test", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    installed_path = "/opt/venv/lib/python3.11/site-packages/pdfx"
+    imported = {
+        "pdfx": SimpleNamespace(__file__=f"{installed_path}/__init__.py"),
+        "pdfx.status": SimpleNamespace(__file__=f"{installed_path}/status.py"),
+    }
+    module.importlib.import_module = lambda name: imported[name]
+    module._load_module = lambda name, path: SimpleNamespace(
+        _audit_command=lambda pdf, source, standard: [
+            sys.executable,
+            "-m",
+            "pdfx.cli",
+            "formula-audit",
+            str(pdf),
+        ]
+    )
+    calls = []
+    module.subprocess.run = lambda command, **kwargs: (
+        calls.append(command) or SimpleNamespace(returncode=0, stdout="", stderr="")
+    )
+
+    assert module.main(["--repository-root", str(ROOT)]) == 0
+    assert calls == [[sys.executable, "-m", "pdfx.cli", "formula-audit", "--help"]]
 
 
 def test_skill_code_does_not_load_pdfx_from_repository_layout():
