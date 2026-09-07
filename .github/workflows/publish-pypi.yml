@@ -34,7 +34,8 @@ jobs:
           wheel_env="$RUNNER_TEMP/scholar-workflow-pdfx-wheel-env"
           uv venv "$wheel_env"
           wheels=("$RUNNER_TEMP"/scholar-workflow-pdfx-dist/scholar_workflow_pdfx-*.whl)
-          test "${#wheels[@]}" -eq 1 && test -f "${wheels[0]}"
+          test "${#wheels[@]}" -eq 1
+          test -f "${wheels[0]}"
           uv pip install --python "$wheel_env/bin/python" "${wheels[0]}"
           mkdir -p "$RUNNER_TEMP/scholar-workflow-pdfx-wheel-check"
           cd "$RUNNER_TEMP/scholar-workflow-pdfx-wheel-check"
@@ -47,7 +48,8 @@ jobs:
           sdist_env="$RUNNER_TEMP/scholar-workflow-pdfx-sdist-env"
           uv venv "$sdist_env"
           sdists=("$RUNNER_TEMP"/scholar-workflow-pdfx-dist/scholar_workflow_pdfx-*.tar.gz)
-          test "${#sdists[@]}" -eq 1 && test -f "${sdists[0]}"
+          test "${#sdists[@]}" -eq 1
+          test -f "${sdists[0]}"
           uv pip install --python "$sdist_env/bin/python" "${sdists[0]}"
           mkdir -p "$RUNNER_TEMP/scholar-workflow-pdfx-sdist-check"
           cd "$RUNNER_TEMP/scholar-workflow-pdfx-sdist-check"

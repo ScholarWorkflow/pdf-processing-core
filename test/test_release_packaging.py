@@ -131,11 +131,12 @@ def test_publish_workflow_contract():
 
     assert "scripts/check_release_tag.py" in workflow
     assert "environment: pypi" in workflow
-    assert "id-token: write" in workflow
     for long_lived_credential in ("PYPI_TOKEN", "password:", "username:"):
         assert long_lived_credential not in workflow
 
-    publish_job = workflow.split("\n  publish:\n", 1)[1]
+    build_job, publish_job = workflow.split("\n  publish:\n", 1)
+    assert "id-token: write" not in build_job
+    assert "permissions:\n      id-token: write" in publish_job
     assert "actions/download-artifact@v4" in publish_job
     assert "pypa/gh-action-pypi-publish@release/v1" in publish_job
     assert "actions/checkout@" not in publish_job
