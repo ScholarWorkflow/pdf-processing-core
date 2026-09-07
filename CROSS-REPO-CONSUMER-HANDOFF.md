@@ -1,28 +1,51 @@
 # Cross-Repository Consumer Handoff
 
-`pdf-processing-core` publishes the installable `pdfx` package and the
-`pdfx` console command. Consumers may keep their compatibility entry points
-until their own migration work is complete.
+The preferred distribution for the public `pdfx` runtime is now:
+
+```text
+scholar-workflow-pdfx>=0.1.0,<0.2
+```
+
+It provides the stable public surface:
+
+```python
+import pdfx
+```
+
+and the `pdfx` console command. The release project is staged from the
+canonical `lib/pdfx` source tree, so this repository does not maintain a
+second copy of the implementation.
+
+## Existing downstream blocker
+
+`ScholarWorkflow/paper-analysis` currently depends on:
+
+```text
+pdf-processing-core
+```
+
+from this Git repository. This issue does not modify that repository. Until
+its migration lands:
+
+- keep the root `pdf-processing-core` project metadata compatible;
+- keep the existing Git-consumer path working;
+- do not remove legacy distribution-name compatibility.
+
+The downstream repository must migrate to
+`scholar-workflow-pdfx>=0.1.0,<0.2` in its own change. After that migration is
+merged, use a separate cleanup issue to remove the legacy root distribution
+name from this repository.
 
 ## Required future replacements
 
-- Direct implementation-module execution -> `pdfx ...`
-- Direct status-script execution -> `pdfx status ...` when that command is
-  adopted by the consumer workflow
-- `sys.path` injection for `pdfx` imports -> an installed
-  `pdf-processing-core` dependency and `import pdfx`
+- Direct implementation-module execution -> `uvx --from
+  'scholar-workflow-pdfx>=0.1.0,<0.2' pdfx ...`
+- Direct status-script execution -> the public `pdfx status ...` command when
+  that command is adopted by the consumer workflow
+- `sys.path` injection for `pdfx` imports -> the bounded
+  `scholar-workflow-pdfx` dependency and `import pdfx`
 
-## Preserved compatibility
-
-- The repository-local direct CLI entry point remains self-locating.
-- `lib/formula_check_cache.py` remains a thin compatibility import.
-- No consumer repository is modified by this handoff.
-
-## Consumer responsibilities
-
-- Supply exact source-document, paired-PDF, auxiliary-source, and caller-
-  metadata paths to the public commands.
-- Treat fingerprints, state files, result files, and atomic finalize markers
-  as runtime contracts rather than implementation details.
-- Use the public package and command surface instead of importing private
-  modules or depending on repository layout.
+Consumers must supply exact source-document, paired-PDF, auxiliary-source,
+and caller-metadata paths to public commands. Fingerprints, state files,
+result files, and atomic finalize markers remain runtime contracts rather than
+implementation details.

@@ -1,23 +1,27 @@
-name: CI
+name: Publish scholar-workflow-pdfx to PyPI
 
 on:
-  push:
-  pull_request:
+  release:
+    types: [published]
 
 jobs:
-  test:
+  build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
       - uses: astral-sh/setup-uv@v6
         with:
           version: latest
-      - name: Run tests
+      - name: Verify GitHub Release tag against package version
+        run: >-
+          uv run --no-project python scripts/check_release_tag.py
+          "${{ github.event.release.tag_name }}"
+      - name: Run repository tests
         run: uv run --with pytest,pymupdf pytest -q lib/pdfx .apm/skills/formula-repair/tests .apm/skills/llm-ocr-refresh/tests test
-      - name: Build root compatibility project
-        run: |
-          rm -rf "$RUNNER_TEMP/pdf-processing-core-dist"
-          uv build . --out-dir "$RUNNER_TEMP/pdf-processing-core-dist"
       - name: Stage release package
         run: uv run --no-project python scripts/stage_release_package.py "$RUNNER_TEMP/scholar-workflow-pdfx-stage"
       - name: Build release artifacts
@@ -53,3 +57,26 @@ jobs:
           export PATH="$sdist_env/bin:$PATH"
           "$sdist_env/bin/python" "$GITHUB_WORKSPACE/scripts/check_release_install.py" \
             --repository-root "$GITHUB_WORKSPACE"
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: scholar-workflow-pdfx-dist
+          path: ${{ runner.temp }}/scholar-workflow-pdfx-dist/
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: scholar-workflow-pdfx-dist
+          path: dist/
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
