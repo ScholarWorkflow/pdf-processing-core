@@ -1,18 +1,36 @@
-name: CI
+name: Publish scholar-workflow-pdfx to PyPI
 
 on:
-  push:
-  pull_request:
+  release:
+    types: [published]
 
 jobs:
-  test:
+  build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
       - uses: astral-sh/setup-uv@v6
         with:
           version: latest
-      - name: Run tests
+      - name: Read release-package version
+        id: release-version
+        run: |
+          version="$(uv run --no-project python -c 'import tomllib; print(tomllib.load(open("packaging/scholar-workflow-pdfx/pyproject.toml", "rb"))["project"]["version"])')"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Verify GitHub Release tag
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          PACKAGE_VERSION: ${{ steps.release-version.outputs.version }}
+        run: |
+          test "$RELEASE_TAG" = "v$PACKAGE_VERSION" || {
+            echo "release tag $RELEASE_TAG does not match v$PACKAGE_VERSION"
+            exit 1
+          }
+      - name: Run repository tests
         run: uv run --with pytest,pymupdf pytest -q lib/pdfx .apm/skills/formula-repair/tests .apm/skills/llm-ocr-refresh/tests test
       - name: Stage release package
         run: uv run --no-project python scripts/stage_release_package.py "$RUNNER_TEMP/scholar-workflow-pdfx-stage"
@@ -45,3 +63,26 @@ jobs:
           export PATH="$sdist_env/bin:$PATH"
           "$sdist_env/bin/python" "$GITHUB_WORKSPACE/scripts/check_release_install.py" \
             --repository-root "$GITHUB_WORKSPACE"
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: scholar-workflow-pdfx-dist
+          path: ${{ runner.temp }}/scholar-workflow-pdfx-dist/
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: scholar-workflow-pdfx-dist
+          path: dist/
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
