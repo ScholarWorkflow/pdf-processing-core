@@ -37,7 +37,7 @@ Accept any of the following, then resolve a source document and its paired PDF:
 Call before a caller consumes a formula-bearing source:
 
 ```bash
-pdfx formula-check "<target>" --json
+uvx --from 'scholar-workflow-pdfx>=0.1.0,<0.2' pdfx formula-check "<target>" --json
 ```
 
 `<target>` may be a paired PDF or source document. The command resolves the pair and returns:
@@ -56,7 +56,7 @@ pdfx formula-check "<target>" --json
 For a source/PDF pair:
 
 ```bash
-pdfx formula-audit "<paired PDF>" --extraction-dir "<source root or omit>" --project
+uvx --from 'scholar-workflow-pdfx>=0.1.0,<0.2' pdfx formula-audit "<paired PDF>" --extraction-dir "<source root or omit>" --project
 ```
 
 - `--project` idempotently projects the aggregate verdict into source metadata.
@@ -80,7 +80,7 @@ The runner creates `<source_root>/.formula-repair-state.json` and transient `.oc
 Invoke the repository-owned runner through the public runtime entry point:
 
 ```bash
-skillrepo exec pdf-processing-core .apm/skills/formula-repair/formula_repair_runner.py
+uv run --script .apm/skills/formula-repair/formula_repair_runner.py
 ```
 
 The refresh skill's unit-worker mode reads job JSON, uses the configured visual-OCR provider abstraction, writes unit results, and never writes source documents, audit sidecars, manifests, or downstream indexes. A worker does not choose a provider or model.
@@ -115,7 +115,7 @@ If the unit-worker registration is unavailable, run `recover` for already claime
 5. After the refresh completion marker, finalize atomically and run a fresh audit:
 
 ```bash
-pdfx formula-audit "<paired PDF>" --force --project
+uvx --from 'scholar-workflow-pdfx>=0.1.0,<0.2' pdfx formula-audit "<paired PDF>" --force --project
 ```
 
 6. Release only when every region is `ok`. Otherwise retry failed units up to 3 times; then return `degraded` with the reason.

@@ -35,7 +35,7 @@ The goal is for every repaired page to match the paired PDF, with formulas repre
 Run the shared `pdfx` kernel:
 
 ```bash
-pdfx quality "<paired PDF absolute path>" --json
+uvx --from 'scholar-workflow-pdfx>=0.1.0,<0.2' pdfx quality "<paired PDF absolute path>" --json
 ```
 
 Use the per-page tier and image count to create page units:
@@ -54,7 +54,7 @@ Thresholds and tier definitions belong to the installable `pdfx` quality package
 For ambiguous plain-text mathematics, run:
 
 ```bash
-pdfx scan-math "<source document absolute path>" --pdf "<paired PDF absolute path>" --json
+uvx --from 'scholar-workflow-pdfx>=0.1.0,<0.2' pdfx scan-math "<source document absolute path>" --pdf "<paired PDF absolute path>" --json
 ```
 
 The kernel performs ambiguity scanning, maps hits to physical pages, and emits region units or page upgrades. Existing LaTeX-delimited spans are protected. If no paired PDF exists, process all hits as page units.
@@ -93,7 +93,7 @@ State the separation clearly: the integrated refresh route and the formula-repai
 2. Run the batch:
 
    ```bash
-   skillrepo exec pdf-processing-core .apm/skills/llm-ocr-refresh/ocr_refresh_jobs.py run \
+   uv run --script .apm/skills/llm-ocr-refresh/ocr_refresh_jobs.py run \
      --target "<source document or paired source>" --pdf "<paired PDF>" \
      --units "<repair_units.json>" --state "<source>.ocr_repair_state.json"
    ```
@@ -105,7 +105,7 @@ State the separation clearly: the integrated refresh route and the formula-repai
 4. After all mandatory units have acceptable results, submit an acceptance plan:
 
    ```bash
-   skillrepo exec pdf-processing-core .apm/skills/llm-ocr-refresh/ocr_refresh_jobs.py finalize \
+   uv run --script .apm/skills/llm-ocr-refresh/ocr_refresh_jobs.py finalize \
      --state "<state>" --accept "<accept_plan.json>"
    ```
 

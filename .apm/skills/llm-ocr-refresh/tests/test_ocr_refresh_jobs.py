@@ -28,8 +28,6 @@ R = importlib.util.module_from_spec(SPEC)
 assert SPEC and SPEC.loader
 SPEC.loader.exec_module(R)
 
-READ_STATUS = Path(__file__).resolve().parents[4] / "lib" / "pdfx" / "read_status.py"
-
 FAKE_GLANCE = r'''
 import json, os, sys, time
 from pathlib import Path
@@ -348,7 +346,7 @@ class RFixture(unittest.TestCase):
             ], stdout=subprocess.DEVNULL, stderr=handle, env=env)
         self.assertEqual(proc.returncode, 0)
         poll = subprocess.run(
-            [sys.executable, str(READ_STATUS), str(log)],
+            [sys.executable, "-c", "from pdfx.read_status import main; raise SystemExit(main())", str(log)],
             capture_output=True, text=True,
         )
         line = poll.stdout.strip()

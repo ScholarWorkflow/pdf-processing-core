@@ -43,6 +43,13 @@ jobs:
           export PATH="$wheel_env/bin:$PATH"
           "$wheel_env/bin/python" "$GITHUB_WORKSPACE/scripts/check_release_install.py" \
             --repository-root "$GITHUB_WORKSPACE"
+          uv pip install --python "$wheel_env/bin/python" pytest
+          "$wheel_env/bin/python" -m pytest -q \
+            "$GITHUB_WORKSPACE/.apm/skills/formula-repair/tests" \
+            "$GITHUB_WORKSPACE/.apm/skills/llm-ocr-refresh/tests" \
+            "$GITHUB_WORKSPACE/test/test_runtime_boundary.py"
+          "$wheel_env/bin/python" "$GITHUB_WORKSPACE/scripts/check_skill_runtime.py" \
+            --repository-root "$GITHUB_WORKSPACE"
       - name: Verify built sdist outside checkout
         run: |
           sdist_env="$RUNNER_TEMP/scholar-workflow-pdfx-sdist-env"
