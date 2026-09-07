@@ -367,11 +367,10 @@ class FormulaRepairRunnerTest(unittest.TestCase):
         self.assertEqual(summary["job_counts"], {"pending": 1})
         self.assertNotIn("jobs", summary)
 
-    def test_audit_command_uses_repo_local_cli(self):
+    def test_audit_command_uses_installed_pdfx_cli(self):
         command = runner._audit_command(self.pdf, self.source, False)
-        cli_args = [item for item in command if item.endswith("lib/pdfx/cli.py")]
-        self.assertEqual(len(cli_args), 1)
-        self.assertNotIn("opencode", cli_args[0])
+        self.assertEqual(command[:2], ["pdfx", "formula-audit"])
+        self.assertNotIn(str(Path("lib") / "pdfx" / "cli.py"), command)
 
     def test_partial_worker_result_retries_only_failed_members(self):
         self._faudit({str(i): {"page_verdict": "unverified", "verdicts": []} for i in range(1, 4)})
@@ -402,10 +401,10 @@ class FormulaRepairRunnerTest(unittest.TestCase):
         updated = runner._load_state(self.root)["jobs"][job["job_id"]]
         self.assertEqual((updated["status"], updated["attempts"]), ("pending", 0))
 
-    def test_standard_audit_command_uses_uv_and_correct_extraction_root(self):
+    def test_standard_audit_command_uses_installed_cli_and_correct_extraction_root(self):
         textbook_source = Path("/tmp/book/extraction/chapter/section/text.md")
         command = runner._audit_command(Path("/tmp/book/split_pdfs/section.pdf"), textbook_source, True)
-        self.assertEqual(command[:5], ["uv", "run", "--with", "pymupdf", "python3"])
+        self.assertEqual(command[:2], ["pdfx", "formula-audit"])
         self.assertIn("--extraction-dir", command)
         self.assertIn("/tmp/book/extraction", command)
 

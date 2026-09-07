@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "scholar-workflow-pdfx>=0.1.0,<0.2",
+#   "PyMuPDF>=1.24",
+# ]
+# ///
 """任务 R：llm-ocr-refresh 一体化批量执行脚本。
 
 只消费上游已经确定的 repair_units.json（schema ocr-refresh-repair-units/1），
@@ -11,11 +18,11 @@ T4 短状态（PROGRESS/RESULT/ERROR 写 stderr）、显式 finalization 原子�
 这不是 formula-repair（任务 F）的 unit worker 路线；两条路线并存。
 
 用法：
-  uv run --with pymupdf,pillow python3 ocr_refresh_jobs.py run \
+  uv run --script .apm/skills/llm-ocr-refresh/ocr_refresh_jobs.py run \
       --target <text.md 或 split md> --pdf <split pdf> \
       --units <repair_units.json> --state <target>.ocr_repair_state.json
 
-  uv run --with pymupdf,pillow python3 ocr_refresh_jobs.py finalize \
+  uv run --script .apm/skills/llm-ocr-refresh/ocr_refresh_jobs.py finalize \
       --state <state> --accept <accept_plan.json>
 """
 
@@ -67,19 +74,7 @@ class JobError(Exception):
         self.message = message
 
 
-def _pdfx_lib_dir() -> Path | None:
-    here = Path(__file__).resolve()
-    for base in list(here.parents)[:5]:
-        candidate = base / "lib"
-        if (candidate / "pdfx" / "status.py").is_file():
-            return candidate
-    return None
-
-
-pdfx_lib_dir = _pdfx_lib_dir()
-if pdfx_lib_dir is not None:
-    sys.path.insert(0, str(pdfx_lib_dir))
-from pdfx.status import StatusReporter  # noqa: E402
+from pdfx.status import StatusReporter
 
 
 def default_glance_path() -> Path:
@@ -248,7 +243,10 @@ def resolve_pdf(path: Path):
     try:
         import fitz
     except ImportError as exc:
-        raise JobError("pymupdf_missing", "run with: uv run --with pymupdf python3") from exc
+        raise JobError(
+            "pymupdf_missing",
+            "run with: uv run --script .apm/skills/llm-ocr-refresh/ocr_refresh_jobs.py",
+        ) from exc
     try:
         doc = fitz.open(str(path))
     except Exception as exc:
