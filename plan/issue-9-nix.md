@@ -93,7 +93,7 @@
 
 ## 5. 唯一必测清单及本地执行步骤
 
-测试修订：`issue9-nix-tests-v2-2026-10-15`，对应实施方案 v4；本次实施修订仅明确用户已接受的共享输入正常请求及实际失败处理约定，T1–T6及recipe不变。测试设计与步骤待审核，未执行，不继承旧版测试通过结论；仍有效的历史结果按受影响范围复用。
+测试修订：`issue9-nix-tests-v3-2026-10-15`，对应实施方案 v4；相对 v2 仅在 T5 执行步骤补充本地文件与本轮 SHA 一致性检查，T1–T6 必测清单与其他执行步骤不变。测试尚未执行，未受影响的既有审核结论按规则复用。
 
 范围仅覆盖固定构建、安装、库导入、CLI/脚本、资源交付及直接修改的 glance 启动行为。普通库/CLI先交付，不以宿主激活为通过条件；pdfx-agent仍是本任务必须交付的资源包，发布时完成T4的适配部分。不新增模型效果、公式准确率、Codex委派、权限认证、第三方服务可用性或全仓回归；共享安装器的冲突、升级/卸载、GC与配置保护不在本仓重复测试。
 
@@ -192,11 +192,18 @@ T5复用`.apm/skills/llm-ocr-refresh/tests/test_ocr_refresh_jobs.py`的unittest�
 
 输入/断言约定：可执行fake和非可执行.py各输出固定短文本，必须收到输入PNG及--ocr；显式--glance、OCR_REFRESH_GLANCE和PATH按既有优先级选择对应fake；超时fake超过传入短timeout，断言run_glance的timed_out及unit_timeout；非零退出fake返回预设退出码，断言原glance_exit错误及无成功文本。复用框架断言和subprocess mock/fake，不新建通用设施、不调用真实provider。只覆盖上述直接改变的启动行为，不扩展排列组合或OCR输出质量。
 
-在实施已补齐这些方法后，本地执行者从生产仓库记录测试目录绝对路径；保持执行工作目录在RUN，不把测试源码安装进消费者。T5针对直接修改的调用函数，按既有单元测试方式加载源码，不能用其结果替代T1–T4正式安装结果：
+在实施已补齐这些方法后，本地执行者从生产仓库记录测试目录绝对路径；保持执行工作目录在RUN，不把测试源码安装进消费者。T5针对直接修改的调用函数，按既有单元测试方式加载源码，不能用其结果替代T1–T4正式安装结果。
+
+执行 T5 前，仅确认实际加载的 `ocr_refresh_jobs.py` 和 `test_ocr_refresh_jobs.py` 与本轮记录的 `SHA` 一致。下述 `git diff --quiet` 返回 0 方可继续；非 0 则停止 T5，排查本地文件差异或命令错误。其他文件有未提交修改不影响 T5，无需重新提取或复制源码：
 
 ```bash
 # TEST_DIR为待测生产仓库的绝对路径加下述现有测试目录；执行前记录实际值
+set -e
 : "${TEST_DIR:?设置为待测生产仓库/.apm/skills/llm-ocr-refresh/tests的绝对路径}"
+TEST_REPO=$(git -C "$TEST_DIR" rev-parse --show-toplevel)
+git -C "$TEST_REPO" diff --quiet "$SHA" -- \
+  .apm/skills/llm-ocr-refresh/ocr_refresh_jobs.py \
+  .apm/skills/llm-ocr-refresh/tests/test_ocr_refresh_jobs.py
 cd "$RUN/consumer"
 TMPDIR="$RUN" nix develop "$SRC" --command python -c '
 import sys, unittest
