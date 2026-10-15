@@ -1,7 +1,7 @@
 # Issue #9：Nix 安装支持执行计划
 
-- 计划版本：`issue9-nix-plan-v1-2026-10-15`
-- 需求版本：[Issue #9](https://github.com/ScholarWorkflow/pdf-processing-core/issues/9)，2026-10-15 已更正“仅 Nix 入口替换运行时取包、保留原 PEP 723/uv、glance 可执行文件、Codex 资源发现及权限边界”。
+- 计划版本：`issue9-nix-plan-v2-2026-10-15`
+- 需求版本：[Issue #9](https://github.com/ScholarWorkflow/pdf-processing-core/issues/9)，2026-10-15 已更正“仅 Nix 入口替换运行时取包、保留原 PEP 723/uv、glance 可执行文件、Codex 资源发现及权限边界”；以及同日用户补充的现有配置保留与冲突显式处理要求。
 - 仓库基线：`main@9ad523a624d94eb2774a0082fde1f54c3ff02256`。实施沿用本计划所在拉取请求分支，并在各次实现/验证记录实际提交号。
 - 现有兼容记录：`CODEX-COMPATIBILITY.md`（2026-09-07：APM 0.29.0、Codex 0.153.4、OpenCode 1.18.21、uv 0.12.5、Python 3.14.7）。这些是当时的实测版本，不是要求 Nix 强制使用 Python 3.14.7。
 - 外部标准：Nixpkgs [依赖与包装说明](https://nixos.org/manual/nixpkgs/stable/)、Nix [锁文件](https://nix.dev/manual/nix/2.28/command-ref/new-cli/nix3-flake-lock)、Codex [技能发现](https://developers.openai.com/codex/skills)和[自定义角色](https://developers.openai.com/codex/subagents)。
@@ -53,6 +53,14 @@
 2. `formula_repair_runner.py` 和 `concurrency-benchmark.json` 在只读资源树中保持相邻目录关系；其运行态的状态文件、`.ocr_units/`、缓存、PDF、日志、凭据等按调用方指定目录生成。包装器只提供程序/资源绝对路径，不把 Nix store 设为运行态工作目录。
 3. `share/pdf-processing-core/apm/.apm/` 完整保留两份 `SKILL.md`、两个 Python 脚本、基准文件及三份 `*.agent.md`。APM 仍拥有 Codex/OpenCode 的安装和转换职责；Codex 的可发现位置是消费端的 `.agents/skills/<name>/`、`.codex/agents/<name>.toml`。仅安装 Nix Python 包不自动注册技能/角色；不得向使用者声称已自动发现。需要宿主使用时，按既有 APM 正式安装路径处理，不造第二套安装器。Nix 文档列明资源在 store 的实际位置、Nix 包装命令及 APM 宿主安装之间的区别。
 4. **两种入口并存**：原 `.apm` 资源继续保留 `uv run --script`/`uvx --from` 的命令；明确要求使用 Nix 的调用方运行上述 Nix 包装器。Nix 入口不修改原文档命令，避免打破 `test/test_runtime_boundary.py` 和既有 APM 转换记录。不能把 Nix 包装器的存在等同于对原 APM 路径的“离线改造”。
+
+**可选宿主接入的配置保留约定**：本包仅交付上述程序与资源；纯库/CLI 使用、读取资源或选择视觉包装均不以改写 Codex/OpenCode 配置为前提。需要宿主接入时仍由既有 APM 正式安装路径承担，文档只说明本包必需的资源映射及必要接入片段，不输出替换整份用户配置的模板，不新增安装器或配置合并器。
+
+- 接入默认限于选定项目，保留其他技能、角色、MCP 以及用户模型、provider、权限、hooks 等无关配置和未知字段；禁止整份覆盖 Codex/OpenCode 配置或整目录替换已有资源。
+- 只检查本次实际映射的技能/角色目标，以及确需接入的配置键及其父级/全局继承值，不扫描无关资源。现有 APM、其他 roots 或用户提供的目标定义相同且可复用时，保留并复用，无需额外确认且不认领所有权；定义不同或实际目标冲突时，报告来源并保持现状，由用户明确保留原来源或切换后再继续该项，不得靠项目优先级静默遮蔽或覆盖。
+- 升级/卸载仅由原接入所有者更新或移除其能够确认由本包管理、且仍与上次生成内容一致的配置项或资源链接。用户编辑过、来源不明和其他包的内容保留并报告；不能确定所有权时停止该项交给使用方，不删除整份配置或共享目录。此约定约束本次 Nix 接入说明，不据此重写 APM 本身或改变现有转换机制。
+
+本次修订只影响 3.2 的接入所有权、冲突和生命周期边界，相关 P1–P4 决定保持 `Proposed review status: pending`，不继承旧批准。基础/增强分期、运行时秘密处理及第五节必测清单不变。受影响行为通过接入后的必要资源/配置项及冲突提示观察；具体检查或复验由测试负责人按 Test Engineer Rule 处理，不新增业务回归或关卡。
 
 ### 3.3 视觉增强的条件交付
 
