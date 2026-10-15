@@ -74,6 +74,7 @@ let
     mkdir -p "$out/formula-repair" "$out/llm-ocr-refresh"
     cp -R ${repository}/.apm/skills/formula-repair/. "$out/formula-repair/"
     cp -R ${repository}/.apm/skills/llm-ocr-refresh/. "$out/llm-ocr-refresh/"
+    chmod u+w "$out/formula-repair/SKILL.md" "$out/llm-ocr-refresh/SKILL.md"
     cp ${formulaRepairSkillText} "$out/formula-repair/SKILL.md"
     cp ${ocrRefreshSkillText} "$out/llm-ocr-refresh/SKILL.md"
   '';
