@@ -31,6 +31,12 @@
 
 **不做**：修改任何下游仓库、批量升级已有固定依赖、改变 OCR/公式算法、引入新公共仓库或跨仓安装器、自动安装第三方模型/权重/远端服务、修改用户全局 Codex 配置、尝试把 OpenCode 权限映射成 Codex 强制访问控制、增加业务测试或模型评分关卡。
 
+### 2.1 方案选择与替代方向
+
+**选择本仓固定源码构建**：沿用现有 `stage_release_package.py`，以本次目标提交和 Nix 输入锁文件生成内核发行包，辅以 Nix 包装器和 APM 资源输出。优势是同一提交下的源码、脚本和资源可逐一对应；代价是需由本仓维护 Nix 打包定义和锁文件。
+
+**现实替代方案：直接把已发布的 PyPI 轮子放进 Nix**。它可以减少内核构建步骤，适合只需要既有 `0.1.0` 公共发行物的消费者；但 Issue #9 同时要求同一目标仓库修订的两份脚本、三份角色及技能资源。如果轮子和脚本来自不同修订，无法凭相同版本字符串证明兼容，且不便在实现该 PR 时测试尚未发布的新资源，因此本次不选。以后某下游只使用纯 `pdfx` 库时，可自主选择已验证的固定轮子版本，不能视为本任务强制迁移。
+
 ## 3. 冻结实现方案
 
 ### 3.1 Nix 输出与依赖归属
@@ -102,6 +108,9 @@ nix profile install --profile "$RUN/profile" "$SRC#pdfx"
 "$RUN/profile/bin/pdfx-formula-repair-runner" --help
 "$RUN/profile/bin/pdfx-ocr-refresh-jobs" --help
 nix develop "$SRC" --command python -c 'import pdfx, pdfx.quality, pdfx.extract, pdfx.status; print(pdfx.__file__)'
+nix develop "$SRC" --command python -c 'import pymupdf, sys; d=pymupdf.open(); p=d.new_page(); p.insert_text((72,72), "sample"); d.save(sys.argv[1]); d.close()' "$RUN/consumer/sample.pdf"
+"$RUN/profile/bin/pdfx" quality "$RUN/consumer/sample.pdf" --json > "$RUN/quality.json"
+jq -e '.pdf and (.pages | type == "array") and (.pages | length == 1)' "$RUN/quality.json"
 
 # 检查本次 Nix 打包负责的原始技能、角色及相邻基准文件
 test -f "$OUT/share/pdf-processing-core/apm/.apm/skills/formula-repair/SKILL.md"
@@ -114,7 +123,7 @@ test -f "$OUT/share/pdf-processing-core/apm/.apm/agents/formula-repair.agent.md"
 test -f "$OUT/share/pdf-processing-core/apm/.apm/agents/llm-ocr-refresh-unit-worker.agent.md"
 ```
 
-为 T2 创建一页普通临时 PDF：在上述 `nix develop` 的 Python 环境中使用已安装的 PyMuPDF，在 `$RUN/consumer/` 生成测试文件后运行 `"$RUN/profile/bin/pdfx" quality "$RUN/consumer/sample.pdf" --json`；只解析本项需要的 JSON 字段。不要使用真实论文、个人资料或真实 OCR 凭据。
+T2 使用上面创建的一页临时 PDF，按 `quality --json` 的既有结果字段检查。不要使用真实论文、个人资料或真实 OCR 凭据。
 
 **执行规则**：记录实际 Nix/包/提交版本、测试目录、输入、命令及本项结果；复用已有有效安装，不因提交号或文档更新无条件重装。外部下载/远端服务故障先确认是否属于预检或环境，固定参数最多再尝试一次；已确认无新信息的故障停止重试，受影响项记“无法判断”。业务行为不符合预期记“失败”，不能靠换输入或跳过结果改成通过。原始诊断仅留在独立 `/tmp` 目录，不提交仓库。
 
