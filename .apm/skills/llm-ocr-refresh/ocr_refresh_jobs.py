@@ -366,7 +366,11 @@ def run_glance(glance_path: Path, png_path: Path, timeout_s: float):
     """Run one glance --ocr subprocess. Returns (ocr_text, call_info, timed_out, error)."""
     env = dict(os.environ)
     env["VISION_CALL_INFO_STDERR"] = "1"
-    cmd = [sys.executable, str(glance_path), str(png_path), "--ocr"]
+    if glance_path.suffix.lower() != ".py" and os.access(glance_path, os.X_OK):
+        launcher = [str(glance_path)]
+    else:
+        launcher = [sys.executable, str(glance_path)]
+    cmd = [*launcher, str(png_path), "--ocr"]
     started = time.monotonic()
     try:
         proc = subprocess.run(

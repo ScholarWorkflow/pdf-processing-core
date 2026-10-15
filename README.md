@@ -4,6 +4,8 @@
 
 当前 APM target 为 `opencode` 与 `codex`；Python 包依赖 `PyMuPDF>=1.24`。
 
+Nix 包、命令和可选 Codex 资源包的使用方式见 [Nix 安装说明](docs/NIX.md)。
+
 ## 在论文分析链中的位置
 
 ```mermaid
