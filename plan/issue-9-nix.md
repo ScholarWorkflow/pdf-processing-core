@@ -1,7 +1,7 @@
 # Issue #9：Nix 安装支持执行计划
 
-- 计划版本：`issue9-nix-plan-v5-2026-10-16`
-- 需求版本：[Issue #9](https://github.com/ScholarWorkflow/pdf-processing-core/issues/9)，2026-10-15 已更正“仅 Nix 入口替换运行时取包、保留原 PEP 723/uv、glance 可执行文件、Codex 资源发现及权限边界”；以及同日用户补充的现有配置保留与冲突显式处理要求。
+- 计划版本：`issue9-nix-plan-v6-2026-10-16`
+- 需求版本：[Issue #9](https://github.com/ScholarWorkflow/pdf-processing-core/issues/9)，2026-10-16 当前版本；保留 2026-10-15 对 Nix 入口、PEP 723/uv 兼容、glance 启动、Codex 资源发现和配置保护的已确认要求。
 - 仓库基线：`main@9ad523a624d94eb2774a0082fde1f54c3ff02256`。实施沿用本计划所在拉取请求分支，并在各次实现/验证记录实际提交号。
 - 现有兼容记录：`CODEX-COMPATIBILITY.md`（2026-09-07：APM 0.29.0、Codex 0.153.4、OpenCode 1.18.21、uv 0.12.5、Python 3.14.7）。这些是当时的实测版本，不是要求 Nix 强制使用 Python 3.14.7。
 - 外部标准：Nixpkgs [依赖与包装说明](https://nixos.org/manual/nixpkgs/stable/)、Nix [锁文件](https://nix.dev/manual/nix/2.28/command-ref/new-cli/nix3-flake-lock)、Codex [技能发现](https://developers.openai.com/codex/skills)和[自定义角色](https://developers.openai.com/codex/subagents)。
@@ -61,7 +61,7 @@
 3. `share/pdf-processing-core/apm/.apm/` 完整保留两份 `SKILL.md`、两个 Python 脚本、基准文件及三份 `*.agent.md`。普通 `packages.<system>.pdfx` 保留上述程序与资源接口；纯库/CLI用户不需要 `mkProject` 或宿主配置。现有 APM 的 Codex/OpenCode 安装和转换路径继续有效。
 4. 本仓已有两技能及三角色，必须交付 `packages.<system>.pdfx-agent` 资源适配输出，消费端可选择不激活。该适配由 `mkAgentPackage` 声明：`files` 指向完整技能目录和所需资源，`exports.skills` 声明两技能；`exports.agents` 从三名现有角色显式提供 `description` 和 `developer_instructions`。共享库不解析 APM manifest，不把原始 `*.agent.md` 自动转换为 Codex TOML，不自动转换业务指令；本仓负责保持既有角色语义并将 Nix 专用资源中的运行命令指向包装器。Nix专用资源仅在构建时派生，源APM文件不改，不伪造OpenCode权限等价。
 5. `pdfx-agent` 的 `runtimePackages = [ pdfx ]` 引用普通库/CLI derivation，不引用自身；它仅保留程序闭包，不会自动将命令加入使用者 PATH；Nix专用技能/角色使用本仓包装器的绝对store路径，或由包装器显式设置其必要PATH。原APM的PEP 723、`uv run --script`/`uvx --from`和发行版本约束保持，Nix入口不运行期取包。
-6. 仅选择 Nix/Codex 接入的消费项目使用 `mkProject { roots = [ packages.<system>.pdfx-agent ]; }` 及共享 apply/remove 接口；普通库/CLI使用与原APM用户都不强制激活或自动迁移。适配包 `enableHarnesses` 默认 `[ "codex" ]`，显式 `[]` 关闭该包投射；共享库目前不支持OpenCode，旧OpenCode/APM路径保留。
+6. 仅选择 Nix/Codex 接入的消费项目使用 `mkProject { roots = [ packages.<system>.pdfx-agent ]; }` 及共享 apply/remove 接口；普通库/CLI使用与原APM用户都不强制激活或自动迁移。适配包通过共享库投射 Codex 资源；共享库目前不支持 OpenCode，旧 OpenCode/APM 路径保留。
 
 **配置与生命周期边界**：直接复用上述共享实现，不在本仓另写冲突检测、所有权记录或卸载器。接入限于选定项目和选定资源；无关技能、角色、MCP、模型、provider、权限、hooks及未知字段保持。相同已有技能/角色/MCP复用且不认领，不同定义报冲突；父级及全局配置只读检查，不以项目优先级静默遮蔽。
 
@@ -93,7 +93,7 @@
 
 ## 5. 唯一必测清单及本地执行步骤
 
-测试修订：`issue9-nix-tests-v4-2026-10-16`，对应实施方案 v5；相对 v3 仅取消 Linux 专属构建要求作为测试前提并澄清平台结果适用范围。T1–T6 的业务目标、已有命令与检查方法不变。PR 已记录在 `aarch64-darwin` 上 T1–T5 通过，T6 未执行；旧结果仍适用，不因本次计划文字修订重跑，第三关结论仍须按测试规则审核。
+测试修订：`issue9-nix-tests-v5-2026-10-16`，对应实施方案 v6；相对 v4 仅删除已撤销的额外配置要求相关说明，T1–T6 的业务目标、已有命令与检查方法不变。PR 已记录在 `aarch64-darwin` 上 T1–T5 通过，T6 未执行；旧结果仍适用，不因本次计划文字修订重跑，第三关结论仍须按测试规则审核。
 
 范围仅覆盖固定构建、安装、库导入、CLI/脚本、资源交付及直接修改的 glance 启动行为。所有 T1–T6 均不得要求 Linux 专用软件包、Linux 宿主、Linux 容器或远程 Linux 构建器；不得把 `x86_64-linux` 构建设为其他平台通过或本轮交付的条件。测试在实际可运行的受支持宿主平台进行，只对该平台报告通过；未测试的平台标为“未验证”，不作为本轮业务失败或额外阻断。普通库/CLI先交付，不以宿主激活为通过条件；pdfx-agent仍是本任务必须交付的资源包，发布时完成T4的适配部分。不新增模型效果、公式准确率、Codex委派、权限认证、第三方服务可用性或全仓回归；共享安装器的冲突、升级/卸载、GC与配置保护不在本仓重复测试。
 
@@ -184,7 +184,7 @@ done
 
 检查两份安装后的SKILL.md及三角色的developer_instructions：应保持既有角色职责/委派目标，Nix专用调用位置分别指向本版本`$OUT/bin/pdfx`及两个脚本包装器的绝对store路径，不依赖uv下载或仅凭runtimePackages假定PATH可用。此处直接人工核对必要命令和角色内容即可，不建新扫描器；脚本能启动已由5.1两个--help覆盖，不重复执行。安装的formula-repair脚本及concurrency-benchmark.json仍相邻。manifest用于定位本仓导出资源，不额外采集全闭包或环境快照。
 
-若祖先或系统配置有同名冲突，记录该环境阻塞并停止此项，不编辑那些配置、不删除已有资源、不绕过共享保护。该故障不反转已成立的普通库/CLI结果。无需再测apply重复性、disable、冲突矩阵、升级/remove、GC或配置保护；这些属于共享库既有验证。
+若祖先或系统配置有同名冲突，记录该环境阻塞并停止此项，不编辑那些配置、不删除已有资源、不绕过共享保护。该故障不反转已成立的普通库/CLI结果。无需再测apply重复性、冲突矩阵、升级/remove、GC或配置保护；这些属于共享库既有验证。
 
 ### 5.3 T5调用兼容与T6增强等待项
 
