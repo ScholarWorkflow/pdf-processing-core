@@ -1,0 +1,96 @@
+{
+  "nodes": {
+    "agent-env-nix": {
+      "inputs": {
+        "agent-skills": "agent-skills",
+        "mcp-servers": "mcp-servers",
+        "nixpkgs": "nixpkgs"
+      },
+      "locked": {
+        "lastModified": 1792067794,
+        "narHash": "sha256-x1of5F3pJ5pc6V3ybv1mVfkLZ6h5rXrla3Ynlq7x2Mw=",
+        "owner": "RekiDunois",
+        "repo": "agent-env-nix",
+        "rev": "760c1bf60e8ec19d1985660ec5e3276a8ef80b5a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "RekiDunois",
+        "repo": "agent-env-nix",
+        "rev": "760c1bf60e8ec19d1985660ec5e3276a8ef80b5a",
+        "type": "github"
+      }
+    },
+    "agent-skills": {
+      "inputs": {
+        "nixpkgs": [
+          "agent-env-nix",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1791801176,
+        "narHash": "sha256-7yMjYQUjpCy0IhItfGt2EJbOobNu1pkIrBX2GA3yOcU=",
+        "owner": "Kyure-A",
+        "repo": "agent-skills-nix",
+        "rev": "2948865044b2af55c8c4e4eb2abda7de79d60f0e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Kyure-A",
+        "repo": "agent-skills-nix",
+        "rev": "2948865044b2af55c8c4e4eb2abda7de79d60f0e",
+        "type": "github"
+      }
+    },
+    "mcp-servers": {
+      "inputs": {
+        "nixpkgs": [
+          "agent-env-nix",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1791930060,
+        "narHash": "sha256-c4os2Fd8PkN0CSE6AHM0vsITZgqJM1fAUivE5mQAV6A=",
+        "owner": "natsukium",
+        "repo": "mcp-servers-nix",
+        "rev": "31848978eefbca17f1658a55066b1d2aaa43cafc",
+        "type": "github"
+      },
+      "original": {
+        "owner": "natsukium",
+        "repo": "mcp-servers-nix",
+        "rev": "31848978eefbca17f1658a55066b1d2aaa43cafc",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1791594108,
+        "narHash": "sha256-XK4KceonkwD8LuMAt/vNrz982mXJM5jeHAxMwsUXXAQ=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "6510408d147d8c5e6d76043e899e9251756f6a75",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "6510408d147d8c5e6d76043e899e9251756f6a75",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "agent-env-nix": "agent-env-nix",
+        "nixpkgs": [
+          "agent-env-nix",
+          "nixpkgs"
+        ]
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
