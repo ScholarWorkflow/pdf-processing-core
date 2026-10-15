@@ -541,10 +541,10 @@ class RFixture(unittest.TestCase):
     def test_glance_timeout_and_failure(self):
         png = self.sample_png()
         slow = self.write_launch_fake(
-            self.root / "slow-glance", "too-late", executable=True, sleep_s=1
+            self.root / "slow-glance", "too-late", executable=True, sleep_s=2
         )
 
-        text, _call_info, timed_out, error = R.run_glance(slow, png, timeout_s=0.1)
+        text, _call_info, timed_out, error = R.run_glance(slow, png, timeout_s=1.0)
 
         self.assertIsNone(text)
         self.assertTrue(timed_out)
