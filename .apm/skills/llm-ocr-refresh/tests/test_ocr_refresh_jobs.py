@@ -13,11 +13,13 @@ import importlib.util
 import io
 import json
 import os
+import shlex
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import fitz
 
@@ -192,6 +194,93 @@ class RFixture(unittest.TestCase):
             "--concurrency", str(concurrency),
             "--glance", str(self.glance),
         ])
+
+    def write_launch_fake(
+        self,
+        path: Path,
+        marker: str,
+        *,
+        executable: bool = False,
+        sleep_s: float = 0,
+        exit_code: int = 0,
+    ) -> Path:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if executable:
+            sleep_command = f"sleep {sleep_s!r}\n" if sleep_s else ""
+            script = (
+                "#!/bin/sh\n"
+                'if [ "$#" -ne 2 ] || [ "$2" != "--ocr" ] || [ ! -f "$1" ]; then\n'
+                "    echo 'expected an existing PNG and --ocr' >&2\n"
+                "    exit 64\n"
+                "fi\n"
+                f"{sleep_command}"
+                f"if [ {exit_code} -ne 0 ]; then\n"
+                "    echo 'fake glance failure' >&2\n"
+                f"    exit {exit_code}\n"
+                "fi\n"
+                f"printf '%s\\n' {shlex.quote(marker)}\n"
+            )
+        else:
+            script = (
+                f"#!{sys.executable}\n"
+                "import pathlib, sys, time\n"
+                "if len(sys.argv) != 3 or sys.argv[2] != '--ocr' or not pathlib.Path(sys.argv[1]).is_file():\n"
+                "    print('expected an existing PNG and --ocr', file=sys.stderr)\n"
+                "    sys.exit(64)\n"
+                f"time.sleep({sleep_s!r})\n"
+                f"if {exit_code!r}:\n"
+                "    print('fake glance failure', file=sys.stderr)\n"
+                f"    sys.exit({exit_code!r})\n"
+                f"print({marker!r})\n"
+            )
+        path.write_text(script, encoding="utf-8")
+        path.chmod(0o755 if executable else 0o644)
+        return path
+
+    def sample_png(self) -> Path:
+        path = self.root / "input.png"
+        document = fitz.open(str(self.pdf))
+        try:
+            document.load_page(0).get_pixmap().save(str(path))
+        finally:
+            document.close()
+        return path
+
+    def run_batch_with_glance_selection(
+        self,
+        case_name: str,
+        *,
+        explicit_glance: Path | None,
+        environment_glance: Path | None,
+        path_dir: Path,
+    ) -> str:
+        target = self.root / f"{case_name}.md"
+        target.write_text("fixture\n", encoding="utf-8")
+        units = self.units_file(
+            f"{case_name}.json",
+            [{"unit_id": "p1", "kind": "page", "page": 1, "read_kind": "first"}],
+            target=target,
+        )
+        argv = [
+            "run",
+            "--target", str(target),
+            "--pdf", str(self.pdf),
+            "--units", str(units),
+            "--state", str(target) + ".ocr_repair_state.json",
+            "--concurrency", "1",
+        ]
+        if explicit_glance is not None:
+            argv.extend(["--glance", str(explicit_glance)])
+
+        with patch.dict(os.environ, {
+            "OCR_REFRESH_GLANCE": str(environment_glance or ""),
+            "PATH": str(path_dir),
+        }):
+            code, err = self.run_r(argv)
+        self.assertEqual(code, 0, err)
+        attempt = self.state_of(target)["units"]["p1"]["attempts"][-1]
+        self.assertEqual(attempt["status"], "ok", attempt)
+        return Path(attempt["ocr"]).read_text(encoding="utf-8")
 
     def state_of(self, target: Path) -> dict:
         return json.loads(Path(str(target) + ".ocr_repair_state.json").read_text())
@@ -369,6 +458,91 @@ class RFixture(unittest.TestCase):
         self.assertEqual(attempt["model"], "fake-model")
         self.assertEqual(attempt["chain_name"], "fake-chain")
         self.assertEqual(attempt["tier"], "free")
+
+    def test_nix_glance_executable(self):
+        png = self.sample_png()
+        glance = self.write_launch_fake(
+            self.root / "glance", "executable-glance", executable=True
+        )
+
+        text, call_info, timed_out, error = R.run_glance(glance, png, timeout_s=2)
+
+        self.assertEqual(text.strip(), "executable-glance")
+        self.assertIsNone(call_info)
+        self.assertFalse(timed_out)
+        self.assertEqual(error, "")
+
+    def test_python_glance_script(self):
+        png = self.sample_png()
+        glance = self.write_launch_fake(
+            self.root / "glance.py", "python-glance", executable=False
+        )
+
+        text, call_info, timed_out, error = R.run_glance(glance, png, timeout_s=2)
+
+        self.assertEqual(text.strip(), "python-glance")
+        self.assertIsNone(call_info)
+        self.assertFalse(timed_out)
+        self.assertEqual(error, "")
+
+    def test_glance_selection_priority(self):
+        bin_dir = self.root / "bin"
+        explicit = self.write_launch_fake(
+            self.root / "explicit.py", "explicit-glance"
+        )
+        environment = self.write_launch_fake(
+            self.root / "environment.py", "environment-glance"
+        )
+        self.write_launch_fake(bin_dir / "glance", "path-glance", executable=True)
+
+        self.assertEqual(
+            self.run_batch_with_glance_selection(
+                "explicit-selection",
+                explicit_glance=explicit,
+                environment_glance=environment,
+                path_dir=bin_dir,
+            ).strip(),
+            "explicit-glance",
+        )
+        self.assertEqual(
+            self.run_batch_with_glance_selection(
+                "environment-selection",
+                explicit_glance=None,
+                environment_glance=environment,
+                path_dir=bin_dir,
+            ).strip(),
+            "environment-glance",
+        )
+        self.assertEqual(
+            self.run_batch_with_glance_selection(
+                "path-selection",
+                explicit_glance=None,
+                environment_glance=None,
+                path_dir=bin_dir,
+            ).strip(),
+            "path-glance",
+        )
+
+    def test_glance_timeout_and_failure(self):
+        png = self.sample_png()
+        slow = self.write_launch_fake(
+            self.root / "slow-glance", "too-late", executable=True, sleep_s=1
+        )
+
+        text, _call_info, timed_out, error = R.run_glance(slow, png, timeout_s=0.1)
+
+        self.assertIsNone(text)
+        self.assertTrue(timed_out)
+        self.assertTrue(error.startswith("unit_timeout"), error)
+
+        failing = self.write_launch_fake(
+            self.root / "failing-glance", "unreachable", executable=True, exit_code=23
+        )
+        text, _call_info, timed_out, error = R.run_glance(failing, png, timeout_s=2)
+
+        self.assertIsNone(text)
+        self.assertFalse(timed_out)
+        self.assertTrue(error.startswith("glance_exit_23:"), error)
 
     def test_structural_lines_fail_the_unit(self):
         source = self.textbook_source()
