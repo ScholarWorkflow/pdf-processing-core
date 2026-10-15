@@ -1,0 +1,136 @@
+# Issue #9：Nix 安装支持执行计划
+
+- 计划版本：`issue9-nix-plan-v1-2026-10-15`
+- 需求版本：[Issue #9](https://github.com/ScholarWorkflow/pdf-processing-core/issues/9)，2026-10-15 已更正“仅 Nix 入口替换运行时取包、保留原 PEP 723/uv、glance 可执行文件、Codex 资源发现及权限边界”。
+- 仓库基线：`main@9ad523a624d94eb2774a0082fde1f54c3ff02256`。实施沿用本计划所在拉取请求分支，并在各次实现/验证记录实际提交号。
+- 现有兼容记录：`CODEX-COMPATIBILITY.md`（2026-09-07：APM 0.29.0、Codex 0.153.4、OpenCode 1.18.21、uv 0.12.5、Python 3.14.7）。这些是当时的实测版本，不是要求 Nix 强制使用 Python 3.14.7。
+- 外部标准：Nixpkgs [依赖与包装说明](https://nixos.org/manual/nixpkgs/stable/)、Nix [锁文件](https://nix.dev/manual/nix/2.28/command-ref/new-cli/nix3-flake-lock)、Codex [技能发现](https://developers.openai.com/codex/skills)和[自定义角色](https://developers.openai.com/codex/subagents)。
+- 规范：[Project Consensus](https://app.notion.com/p/rekidunois/Project-Consensus-3d60101a85f3815a8c43f271f2b4d91d)、[Plan Reviewer Rule](https://app.notion.com/p/rekidunois/Plan-Reviewer-Rule-3e80101a85f3817a94cbc6eca1a76a5c)、[Test Engineer Rule](https://app.notion.com/p/rekidunois/Test-Engineer-Rule-3d80101a85f380d8a8f5ce528141e253)；冲突时优先共识中的产品操作约束，测试范围以测试规则为准。
+- `Proposed review status: pending`。本文件是待审核计划；未经正式 P1–P4 审核并取得 `Plan conclusion: APPROVED`，不得开始核心实现。
+
+## 1. 需求、事实与决策依据
+
+本任务的产品目标是：同一份 `lib/pdfx` 源码交付可被其他 Nix 项目引用的 Python 库和 `pdfx` 命令；携带现有两个技能、两个脚本、三名角色与调度资源。视觉增强在有明确的 `vision-tools/glance` 依赖时启用；基础包先能独立交付。新增入口不更改现有 APM/Codex/OpenCode 行为。
+
+| 决策 | 正式要求（应怎样） | 基线事实（现在怎样、确切文件） | 改动位置 |
+| --- | --- | --- | --- |
+| D1：单份源码、发行兼容 | Issue #9 不允许另建业务包；消费者固定版本不得自动升为最新源码 | `lib/pdfx` 是内核；`pyproject.toml` 仍叫 `pdf-processing-core`，`packaging/scholar-workflow-pdfx/pyproject.toml` 叫 `scholar-workflow-pdfx`，两者版本均为 `0.1.0`；`scripts/stage_release_package.py` 从 `lib/pdfx` 暂存独立发行物；`CROSS-REPO-CONSUMER-HANDOFF.md` 要保留旧名称给 `paper-analysis` | 新增 `flake.nix`、`flake.lock`、`nix/pdfx.nix`；调用既有暂存脚本 |
+| D2：Nix 运行不临时拉 Python 包 | Issue #9 修订后只要求 Nix 入口移除运行期 `uv` 下载；原 APM 入口必须保留 | 两个技能脚本的 PEP 723 依赖是 `scholar-workflow-pdfx>=0.1.0,<0.2`；`test/test_runtime_boundary.py` 明确约束 `uv run --script` 和 `uvx --from`；`CODEX-COMPATIBILITY.md` 规定保留部署路径 | Nix 构建的 Python 环境和独立运行包装器，不改原技能脚本的 PEP 723 声明 |
+| D3：技能与角色不能靠 Nix store 自动注册 | Issue #9 要携带有效资源、保留宿主安装 | `.apm/skills/{formula-repair,llm-ocr-refresh}` 含脚本，`formula-repair/concurrency-benchmark.json` 被脚本按相邻目录读取；`.apm/agents` 恰有三角色；`CODEX-COMPATIBILITY.md` 的 APM 安装产出是 `.agents/skills/<name>/` 和 `.codex/agents/<name>.toml`。Codex 官方文档同样只从规定目录发现资源 | 将 APM 源资源原样打包进 Nix 输出 `share/pdf-processing-core/apm/.apm/`，宿主继续由既有 APM 安装器投射；文档明确二者职责 |
+| D4：Codex 角色约定不等于强制权限 | Issue #9 保留委派约定，不要求改变宿主 | `CODEX-COMPATIBILITY.md` 已验证 APM 产出的 Codex 角色只含 `name`、`description`、`developer_instructions`，不会保留 OpenCode 的 `mode`、`hidden`、`permission`、`task` 限制 | 不加伪造的权限映射，不把强制权限对等作为测试项 |
+| D5：视觉能力可选 | Issue #9 要求基础路径不依赖视觉服务；Apple Vision 仅在支持环境启用 | `lib/pdfx/extract.py` 按 `layout → transcription → native` 尝试，远端提供者由运行时配置；`lib/pdfx/ocr_apple.py` 懒加载 `Quartz/Vision/CoreFoundation`；`ocr_refresh_jobs.py` 运行中依赖 PyMuPDF、Pillow，并通过 `--glance` > `OCR_REFRESH_GLANCE` > `PATH` 寻找 `glance`；`run_glance` 当前总是调用 `sys.executable <glance_path>`，不能直接运行 Nix 二进制包装器 | Nix 可选视觉包装及 `ocr_refresh_jobs.py` 的启动分支 |
+| D6：秘密及可变状态不入 store | Issue #9 明确禁止秘密、日志和缓存固化 | 运行器会生成 `.ocr_units/`、`.formula-repair-state.json` 及结果文件；`formula_repair_runner.py` 用 `__file__` 旁的基准数据；图像/网络提供者设置由运行环境持有 | Nix 输出仅为只读程序/资源；可写位置全部来自调用方与独立运行目录 |
+
+事实来源均为上述仓库基线；Nixpkgs 的确切包版本、外部视觉包可消费版本要在实施前按所选 `flake.lock` 核实并记录，不能猜测或把缺失的外部服务写成已验证成功。
+
+## 2. 范围和不做的事
+
+**本次要改**：Nix 可消费的内核/命令输出；两个已有脚本的 Nix 启动包装器；两个技能、三角色、基准文件和相对资源路径的只读交付；必要的直接依赖及版本锁定；基础包与增强配置的区分；对应文档和本次安装目标的最小检查。
+
+**保留**：`pdfx` 的公开模块/命令名及既有参数，`pdf-processing-core` 根项目兼容名称，`scholar-workflow-pdfx>=0.1.0,<0.2` 的既有 APM 调用，两个技能的 PEP 723 元数据、源 `SKILL.md`/角色正文、APM 两个 target 和原有委派约定；原有写入、缓存、回退和调用方所有权。
+
+**不做**：修改任何下游仓库、批量升级已有固定依赖、改变 OCR/公式算法、引入新公共仓库或跨仓安装器、自动安装第三方模型/权重/远端服务、修改用户全局 Codex 配置、尝试把 OpenCode 权限映射成 Codex 强制访问控制、增加业务测试或模型评分关卡。
+
+## 3. 冻结实现方案
+
+### 3.1 Nix 输出与依赖归属
+
+1. 在本仓新增 `flake.nix`、提交生成的 `flake.lock`，用 Nixpkgs 现成的 Python 构建函数及 `makeWrapper`/`symlinkJoin` 等库函数，**不另起一个公共依赖仓库**。`nix/pdfx.nix` 只负责构建与包装；本仓锁住直接引入的第三方 Nix 输入；远端源使用固定修订和散列，禁止构建时浮动追踪 `main`。
+2. 基础输出为 `packages.<system>.pdfx`，包含 `bin/pdfx`、`bin/pdfx-formula-repair-runner`、`bin/pdfx-ocr-refresh-jobs`，以及 `share/pdf-processing-core/apm/.apm/` 资源树。另提供 `devShells.<system>.default`，使用与构建相同的 Python 包环境以验证 `import pdfx`。优先实现并验证 `x86_64-linux`；其他系统仅在对应 Nix 依赖确实能求值和构建时声明支持，不凭平台名称推断兼容性。
+3. 由 `scripts/stage_release_package.py` 在 Nix 构建的临时目录准备现有 `packaging/scholar-workflow-pdfx/pyproject.toml` 与 `lib/pdfx`；以 Nixpkgs 的 Python PEP 517 构建能力安装该暂存项目。不得复制出另一份需人工维护的 `pdfx` 源码。构建前调用现有 `validate_release_contract` 核对根项目、发行项目、`pdfx.__version__`、CLI 和依赖是否一致。
+4. Nix 中由**同一套** Python/`PyMuPDF>=1.24` 供库、命令及两个运行包装器使用；增强脚本还需要显式安装 `Pillow`。构建时使用的 `hatchling` 是构建依赖；`PyMuPDF` 是库运行依赖；`Pillow` 是图像渲染脚本的运行依赖。基础包不得引入 `vision-tools`、云端服务及权重。若已锁定的 Nixpkgs 缺少符合要求的包，实施者须在本仓加固定源和散列的包构建定义并保持发行兼容；不得默默使用版本不足的系统包。
+5. 包名和版本号来自现有发行元数据；同时记录**具体 Nix 输入修订与目标仓库提交号**。同为 `0.1.0` 不代表任意仓库提交与已发行 PyPI 轮子逐字节等价。消费者只可选自己核实过的固定引用，不因新输出存在就无条件迁移。
+
+### 3.2 包装器与资源
+
+1. `bin/pdfx` 调用已安装的 `pdfx.cli:main`。`bin/pdfx-formula-repair-runner` 运行打包后的 `formula_repair_runner.py`；`bin/pdfx-ocr-refresh-jobs` 运行打包后的 `ocr_refresh_jobs.py`。两个脚本包装器使用 Nix 输出中的 Python，并可在任意工作目录启动；不经 `uv`/`uvx`，不注入生产仓库的 `lib` 路径，也不自行推测资源文件位置。
+2. `formula_repair_runner.py` 和 `concurrency-benchmark.json` 在只读资源树中保持相邻目录关系；其运行态的状态文件、`.ocr_units/`、缓存、PDF、日志、凭据等按调用方指定目录生成。包装器只提供程序/资源绝对路径，不把 Nix store 设为运行态工作目录。
+3. `share/pdf-processing-core/apm/.apm/` 完整保留两份 `SKILL.md`、两个 Python 脚本、基准文件及三份 `*.agent.md`。APM 仍拥有 Codex/OpenCode 的安装和转换职责；Codex 的可发现位置是消费端的 `.agents/skills/<name>/`、`.codex/agents/<name>.toml`。仅安装 Nix Python 包不自动注册技能/角色；不得向使用者声称已自动发现。需要宿主使用时，按既有 APM 正式安装路径处理，不造第二套安装器。Nix 文档列明资源在 store 的实际位置、Nix 包装命令及 APM 宿主安装之间的区别。
+4. **两种入口并存**：原 `.apm` 资源继续保留 `uv run --script`/`uvx --from` 的命令；明确要求使用 Nix 的调用方运行上述 Nix 包装器。Nix 入口不修改原文档命令，避免打破 `test/test_runtime_boundary.py` 和既有 APM 转换记录。不能把 Nix 包装器的存在等同于对原 APM 路径的“离线改造”。
+
+### 3.3 视觉增强的条件交付
+
+1. 基础 `pdfx` 包只宣称文本提取、质量检查、命令及脚本运行环境已就绪。`extract --strategy auto` 等既有选项保留，但未配置视觉提供者时不得宣称扫描 PDF 一定能 OCR；返回的 `vision-failed`/`none` 等既有状态仍交调用方处理。不能把“CLI 能识别选项”写成“增强能力可用”。
+2. 增强部分使用显式传入的 `vision-tools/glance` **Nix derivation** 组成包装配置；只在真实依赖可固定、构建和安装时发布增强输出，不能在无该依赖时提供声称完整的 `full` 版本。默认 `PATH` 提供程序，`OCR_REFRESH_GLANCE` 和 `--glance` 依现有优先级覆盖；endpoint/model/凭据、缓存/日志只来自运行时。
+3. 修改 `ocr_refresh_jobs.py:run_glance` 的入口选择：普通可执行 `glance`/Nix 包装器直接作为子进程运行；既有 Python 脚本仍可在当前 Python 环境运行。维持 `--glance` > `OCR_REFRESH_GLANCE` > `PATH`、`--ocr` 参数、超时及错误结果的原语义。只处理为新增 Nix 启动方式所必需的差异。
+4. `Apple Vision` 仅在确认 PyObjC 绑定和 Apple 系统框架可用的 Darwin 环境声明支持；Linux 上不尝试链接或假装提供 `Vision`。远端 OCR、模型和权重不作为本仓包的隐含依赖。视觉依赖未就绪时标记为“增强未发布/待上游”，不得据此阻止**基础库与 CLI** 的交付，也不得报告增强检查通过。
+
+## 4. 实施顺序、文件责任与停止条件
+
+| 步骤 | 文件/归属 | 具体动作 | 完成条件或停止条件 |
+| --- | --- | --- | --- |
+| S0 | 本 PR、`plan/issue-9-nix.md` | 先完成 P1–P4 正式审核；固定本计划、需求和基线 SHA；已知的包版本冲突需在此处理 | 没有 `APPROVED` 不开始核心实现 |
+| S1 | `flake.nix`、`flake.lock`、`nix/pdfx.nix` | 固定 Nix 输入，用原暂存脚本构建 `scholar-workflow-pdfx`；暴露基础输出与 Python 开发环境 | `pdfx` 由 Nix 输出提供且可引用；PyMuPDF 版本满足约束；不引入视觉包 |
+| S2 | Nix 打包文件 | 在同一环境包装两个脚本并安装 `.apm` 资源及基准文件；显式资源定位、所有产物只读 | 运行包装器可独立于 checkout 启动，资源路径在 Nix 输出中存在且相邻关系正确 |
+| S3 | `docs/NIX.md`、必要的 `README.md` 链接 | 写出锁定版本/提交、Nix 构建与干净安装、导入、CLI/脚本调用、APM 宿主边界、外部视觉配置及能力限制 | 新消费端不必猜 Python 位置、Nix store 资源位置或把 store 当可写工作目录 |
+| S4 | `ocr_refresh_jobs.py` 和其已存在的测试文件（仅需时） | 允许 Nix 可执行 `glance` 直接调用，保留 Python 脚本和错误/超时行为；独立视觉包装等上游可固定后接线 | 无增强依赖时仅基础包可发布；增强包只有构建并校验入口后才发布 |
+| S5 | `plan/issue-9-nix.md`、必要的产品安装检查 | 对本次交付执行第 5 节最小必测项；记录所用 commit、Nix 输入修订、消费目录、命令和结果 | 所有已声明交付的必测项有实际结果；未就绪增强项标记待上游，不伪报 PASS |
+
+**失败与清理**：依赖无法固定/构建时停止对应输出，不能转为运行时联网安装；Nix 失败构建不影响原 APM/PyPI 路径。调用输入缺失继续报原错误；提供者不可用维持原失败/降级状态，不写入虚假完成标记。独立临时运行目录删除前保留必要失败记录；不修改用户状态、不在 store 写入缓存或日志。
+
+**下游交接**：基础输出完成后记录可供 `paper-analysis`、`pdf-book-pipeline`、`exam-preprocess`、`study-tools`、`admissions-data` 固定引用的精确包输出/SHA、已验证命令、尚缺的视觉依赖。消费者在自己的变更中决定引用版本与直接依赖；本 PR 不修改其源码或锁文件。
+
+## 5. 唯一必测清单及本地执行步骤
+
+测试范围仅覆盖 Issue #9 的构建、安装、导入、CLI/脚本、资源和本次直接修改的 `glance` 启动行为。**不新增**模型效果、公式准确率、Codex 委派、权限认证、第三方服务或全仓回归测试关卡。`Test Engineer Rule` 三关由有权审核者给出结论；本计划不自称已通过。
+
+| 项 | 业务目标；输入/场景 | 预期结果及唯一检查方式 |
+| --- | --- | --- |
+| T1 | 从本 PR 精确提交及已锁定 Nix 输入构建基础包 | `nix build` 成功，包内有 `bin/pdfx` 与两个脚本包装器；构建信息记录精确修订。直接检查 Nix 构建输出 |
+| T2 | 从生产仓库/worktree 外的全新消费目录，按 Nix 正式安装路径使用 `pdfx` | 安装成功；`pdfx --help` 与 `pdfx quality --help` 成功；对一份临时普通 PDF 的 `quality --json` 返回可解析结果。直接检查退出码和命令输出 |
+| T3 | 在同一版本 Nix Python 环境 `import pdfx` | 导入 `pdfx`、`pdfx.quality`、`pdfx.extract`、`pdfx.status` 成功，模块位置来自 Nix 安装输出而非生产仓库。使用现有 `check_release_install.py` 的等价导入检查即可 |
+| T4 | Nix 打包资源和两个脚本包装器 | 两个包装器的 `--help` 能运行；两份技能、两份脚本、三份角色和 `concurrency-benchmark.json` 存在于约定资源路径且相邻关系正确。直接检查命令与目标文件；既有 APM 投射结果按 `CODEX-COMPATIBILITY.md` 复用，不新增 Codex 模型调用 |
+| T5（仅增强变更时） | 指定可执行 `glance` 及现有 Python `glance` 脚本分别走既有 `--glance`/环境变量路径 | 命令启动的是所指定的程序，保持 `--ocr`、超时及失败处理；使用 `ocr_refresh_jobs.py` 已有测试框架增加最小调用测试，**不**测试 OCR 准确率或外部服务可用性 |
+| T6（仅增强输出实际发布时） | 固定且可安装的 `vision-tools/glance` 与匹配 Python 依赖 | 增强安装和一次受控启动检查成功；不具备该依赖时记“待上游/未执行”，不把基础包判失败。Apple Vision 仅在实际支持的 Darwin 环境检查，Linux 不算 Apple Vision 成功 |
+
+**准备与执行**（本地测试工程师按实际 Nix 版本补齐有效运行配置；所有临时产物放在独立 `/tmp` 目录）：
+
+```bash
+# 从待测生产仓库读取确切提交，记录为 SHA；不要从 worktrees 或消费者目录取它
+SHA=$(git rev-parse HEAD)
+RUN=$(mktemp -d /tmp/pdfx-nix9-XXXXXX)
+mkdir -p "$RUN/consumer"
+cd "$RUN/consumer"
+
+# 从确切 SHA 通过 Nix 正式安装；不要复制生产源码、创建可编辑安装或补改 consumer
+SRC="github:ScholarWorkflow/pdf-processing-core/$SHA"
+OUT=$(nix build --no-link --print-out-paths "$SRC#pdfx")
+nix profile install --profile "$RUN/profile" "$SRC#pdfx"
+
+"$RUN/profile/bin/pdfx" --help
+"$RUN/profile/bin/pdfx" quality --help
+"$RUN/profile/bin/pdfx-formula-repair-runner" --help
+"$RUN/profile/bin/pdfx-ocr-refresh-jobs" --help
+nix develop "$SRC" --command python -c 'import pdfx, pdfx.quality, pdfx.extract, pdfx.status; print(pdfx.__file__)'
+
+# 检查本次 Nix 打包负责的原始技能、角色及相邻基准文件
+test -f "$OUT/share/pdf-processing-core/apm/.apm/skills/formula-repair/SKILL.md"
+test -f "$OUT/share/pdf-processing-core/apm/.apm/skills/formula-repair/formula_repair_runner.py"
+test -f "$OUT/share/pdf-processing-core/apm/.apm/skills/formula-repair/concurrency-benchmark.json"
+test -f "$OUT/share/pdf-processing-core/apm/.apm/skills/llm-ocr-refresh/SKILL.md"
+test -f "$OUT/share/pdf-processing-core/apm/.apm/skills/llm-ocr-refresh/ocr_refresh_jobs.py"
+test -f "$OUT/share/pdf-processing-core/apm/.apm/agents/pdf-to-text.agent.md"
+test -f "$OUT/share/pdf-processing-core/apm/.apm/agents/formula-repair.agent.md"
+test -f "$OUT/share/pdf-processing-core/apm/.apm/agents/llm-ocr-refresh-unit-worker.agent.md"
+```
+
+为 T2 创建一页普通临时 PDF：在上述 `nix develop` 的 Python 环境中使用已安装的 PyMuPDF，在 `$RUN/consumer/` 生成测试文件后运行 `"$RUN/profile/bin/pdfx" quality "$RUN/consumer/sample.pdf" --json`；只解析本项需要的 JSON 字段。不要使用真实论文、个人资料或真实 OCR 凭据。
+
+**执行规则**：记录实际 Nix/包/提交版本、测试目录、输入、命令及本项结果；复用已有有效安装，不因提交号或文档更新无条件重装。外部下载/远端服务故障先确认是否属于预检或环境，固定参数最多再尝试一次；已确认无新信息的故障停止重试，受影响项记“无法判断”。业务行为不符合预期记“失败”，不能靠换输入或跳过结果改成通过。原始诊断仅留在独立 `/tmp` 目录，不提交仓库。
+
+## 6. 安全条件、反例和未完成事项
+
+- **不变条件 A**：Nix 核心包不要求 `vision-tools`；反例为某个导入或包装器在普通文本提取时直接启动 `glance`。方案以基础/增强分开及懒加载解决；不改上游 OCR 算法。
+- **不变条件 B**：Nix 同一版本的 `pdfx` API/CLI 仍来自 `lib/pdfx`；反例为维护第二份 Nix 专用内核或以任意 `main` 替代固定发行版本。方案用已有暂存脚本和 SHA/依赖锁定。
+- **不变条件 C**：Codex/OpenCode 的 APM 入口保持原语义；反例为直接删除脚本 PEP 723、把所有 `uvx` 示例改成 Nix 专用命令，或以 `hidden` 作为 Codex ACL 成功证据。方案保持默认资源原样及双入口。
+- **不变条件 D**：所有可写状态、模型配置和秘密在 store 外；反例为 `.ocr_units` 写入只读资源目录或将 API 密钥固定在 Nix derivation。方案由调用方提供可写路径，包只包含程序/只读资源。
+- **不变条件 E**：Nix `glance` 包装器是可执行文件时不能交给 Python 当作源码解析；方案只在对应调用点区分可执行文件和既有 Python 脚本。
+- **不变条件 F**：原 APM 角色/技能的实际发现仍以合法安装路径为准；反例为只有 `/nix/store/.../.apm` 文件就宣称 Codex 已加载。方案仅保证 Nix 资源输出和 APM 安装职责，不声称未执行的注册。
+
+**已知等待项**：`vision-tools/glance` 可固定的 Nix 依赖、各消费者实际固定版本，以及 Darwin 系统框架/绑定可用性由后续实施按对应源记录。它们不阻止**基础** Nix 包设计与交付；实际增强输出是否可以发布取决于依赖和对应最小安装检查。不得把这些未验证事项写成已经通过。
+
+## 7. 交接和拉取请求状态
+
+- 本拉取请求初始仅提交本计划；为 `draft`，正文含 `Closes #9`，但**不能提前合并**。后续 Nix 文件、文档、直接受影响的产品代码和必要测试均提交在同一分支与同一拉取请求。
+- 实施前由独立计划审核者按 P1–P4 给出正式记录；测试第一、第二和第三关也须按 `Test Engineer Rule` 的授权角色处理。本文件不得自行把计划写成 `APPROVED`，也不把方案审核通过等同于测试/合并通过。
+- 交接时只维护此 `plan/issue-9-nix.md` 最新完整版本，PR/Issue 评论引用路径及版本，避免让本地代理拼接评论。交付记录列明基础包可消费的实际 SHA、包版本、完成的 T1–T4 结果、增强项状态及下游仍需自行核对的依赖。
