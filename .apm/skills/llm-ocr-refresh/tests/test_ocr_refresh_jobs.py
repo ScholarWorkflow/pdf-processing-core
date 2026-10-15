@@ -205,6 +205,7 @@ class RFixture(unittest.TestCase):
         exit_code: int = 0,
     ) -> Path:
         path.parent.mkdir(parents=True, exist_ok=True)
+        received_path = Path(str(path) + ".received")
         if executable:
             sleep_command = f"sleep {sleep_s!r}\n" if sleep_s else ""
             script = (
@@ -213,6 +214,7 @@ class RFixture(unittest.TestCase):
                 "    echo 'expected an existing PNG and --ocr' >&2\n"
                 "    exit 64\n"
                 "fi\n"
+                f"printf '%s' \"$1\" > {shlex.quote(str(received_path))}\n"
                 f"{sleep_command}"
                 f"if [ {exit_code} -ne 0 ]; then\n"
                 "    echo 'fake glance failure' >&2\n"
@@ -227,6 +229,7 @@ class RFixture(unittest.TestCase):
                 "if len(sys.argv) != 3 or sys.argv[2] != '--ocr' or not pathlib.Path(sys.argv[1]).is_file():\n"
                 "    print('expected an existing PNG and --ocr', file=sys.stderr)\n"
                 "    sys.exit(64)\n"
+                f"pathlib.Path({str(received_path)!r}).write_text(sys.argv[1], encoding='utf-8')\n"
                 f"time.sleep({sleep_s!r})\n"
                 f"if {exit_code!r}:\n"
                 "    print('fake glance failure', file=sys.stderr)\n"
@@ -236,6 +239,14 @@ class RFixture(unittest.TestCase):
         path.write_text(script, encoding="utf-8")
         path.chmod(0o755 if executable else 0o644)
         return path
+
+    def assert_fake_received_png(self, glance: Path, expected_png: Path) -> None:
+        received_path = Path(str(glance) + ".received")
+        self.assertTrue(received_path.is_file(), received_path)
+        self.assertEqual(Path(received_path.read_text(encoding="utf-8")), expected_png)
+        self.assertEqual(expected_png.suffix.lower(), ".png")
+        with expected_png.open("rb") as image:
+            self.assertEqual(image.read(8), b"\x89PNG\r\n\x1a\n")
 
     def sample_png(self) -> Path:
         path = self.root / "input.png"
@@ -280,6 +291,8 @@ class RFixture(unittest.TestCase):
         self.assertEqual(code, 0, err)
         attempt = self.state_of(target)["units"]["p1"]["attempts"][-1]
         self.assertEqual(attempt["status"], "ok", attempt)
+        selected_glance = explicit_glance or environment_glance or (path_dir / "glance")
+        self.assert_fake_received_png(selected_glance, Path(attempt["png"]))
         return Path(attempt["ocr"]).read_text(encoding="utf-8")
 
     def state_of(self, target: Path) -> dict:
@@ -471,6 +484,7 @@ class RFixture(unittest.TestCase):
         self.assertIsNone(call_info)
         self.assertFalse(timed_out)
         self.assertEqual(error, "")
+        self.assert_fake_received_png(glance, png)
 
     def test_python_glance_script(self):
         png = self.sample_png()
@@ -484,6 +498,7 @@ class RFixture(unittest.TestCase):
         self.assertIsNone(call_info)
         self.assertFalse(timed_out)
         self.assertEqual(error, "")
+        self.assert_fake_received_png(glance, png)
 
     def test_glance_selection_priority(self):
         bin_dir = self.root / "bin"
@@ -534,6 +549,7 @@ class RFixture(unittest.TestCase):
         self.assertIsNone(text)
         self.assertTrue(timed_out)
         self.assertTrue(error.startswith("unit_timeout"), error)
+        self.assert_fake_received_png(slow, png)
 
         failing = self.write_launch_fake(
             self.root / "failing-glance", "unreachable", executable=True, exit_code=23
@@ -543,6 +559,7 @@ class RFixture(unittest.TestCase):
         self.assertIsNone(text)
         self.assertFalse(timed_out)
         self.assertTrue(error.startswith("glance_exit_23:"), error)
+        self.assert_fake_received_png(failing, png)
 
     def test_structural_lines_fail_the_unit(self):
         source = self.textbook_source()
