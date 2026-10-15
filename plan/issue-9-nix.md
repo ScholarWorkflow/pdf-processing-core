@@ -87,54 +87,129 @@
 
 ## 5. 唯一必测清单及本地执行步骤
 
-测试范围仅覆盖 Issue #9 的构建、安装、导入、CLI/脚本、资源和本次直接修改的 `glance` 启动行为。**不新增**模型效果、公式准确率、Codex 委派、权限认证、第三方服务或全仓回归测试关卡。`Test Engineer Rule` 三关由有权审核者给出结论；本计划不自称已通过。
+测试修订：`issue9-nix-tests-v2-2026-10-15`，对应实施方案 v3；本次只替换测试清单、recipe及指针，实施方案不变。测试设计与步骤待审核，未执行，不继承旧版测试通过结论；仍有效的历史结果按受影响范围复用。
 
-| 项 | 业务目标；输入/场景 | 预期结果及唯一检查方式 |
+范围仅覆盖固定构建、安装、库导入、CLI/脚本、资源交付及直接修改的 glance 启动行为。普通库/CLI先交付，不以宿主激活为通过条件；pdfx-agent仍是本任务必须交付的资源包，发布时完成T4的适配部分。不新增模型效果、公式准确率、Codex委派、权限认证、第三方服务可用性或全仓回归；共享安装器的冲突、升级/卸载、GC与配置保护不在本仓重复测试。
+
+| 项 | 业务目标；输入/场景 | 预期结果及足够检查方式 |
 | --- | --- | --- |
-| T1 | 从本 PR 精确提交及已锁定 Nix 输入构建基础包 | `nix build` 成功，包内有 `bin/pdfx` 与两个脚本包装器；构建信息记录精确修订。直接检查 Nix 构建输出 |
-| T2 | 从生产仓库/worktree 外的全新消费目录，按 Nix 正式安装路径使用 `pdfx` | 安装成功；`pdfx --help` 与 `pdfx quality --help` 成功；对一份临时普通 PDF 的 `quality --json` 返回可解析结果。直接检查退出码和命令输出 |
-| T3 | 在同一版本 Nix Python 环境 `import pdfx` | 导入 `pdfx`、`pdfx.quality`、`pdfx.extract`、`pdfx.status` 成功，模块位置来自 Nix 安装输出而非生产仓库。使用现有 `check_release_install.py` 的等价导入检查即可 |
-| T4 | Nix 打包资源和两个脚本包装器 | 两个包装器的 `--help` 能运行；两份技能、两份脚本、三份角色和 `concurrency-benchmark.json` 存在于约定资源路径且相邻关系正确。直接检查命令与目标文件；既有 APM 投射结果按 `CODEX-COMPATIBILITY.md` 复用；共享适配发布时只做一次干净项目安装，检查两技能完整文件、三角色映射及包装器绝对路径；不重测共享安装器全套冲突/生命周期，不新增 Codex 模型调用 |
-| T5（仅增强变更时） | 指定可执行 `glance` 及现有 Python `glance` 脚本分别走既有 `--glance`/环境变量路径 | 命令启动的是所指定的程序，保持 `--ocr`、超时及失败处理；使用 `ocr_refresh_jobs.py` 已有测试框架增加最小调用测试，**不**测试 OCR 准确率或外部服务可用性 |
-| T6（仅增强输出实际发布时） | 固定且可安装的 `vision-tools/glance` 与匹配 Python 依赖 | 增强安装和一次受控启动检查成功；不具备该依赖时记“待上游/未执行”，不把基础包判失败。Apple Vision 仅在实际支持的 Darwin 环境检查，Linux 不算 Apple Vision 成功 |
+| T1 | 精确提交和锁定输入构建普通pdfx | 一次nix build成功；输出含pdfx及两脚本包装器。记录输出路径，后续安装与运行复用该产物 |
+| T2 | 仓库外干净消费目录使用普通库/CLI；一页临时PDF | 独立profile安装成功；pdfx --help、quality --help成功；quality --json解析成功且pages有一页。只查看退出码与必要JSON字段，不做OCR业务 |
+| T3 | 同版本Nix Python环境导入 | pdfx、pdfx.quality、pdfx.extract、pdfx.status导入成功，模块位置来自Nix安装输出，不是checkout。复用该环境生成T2临时输入，无额外公开库属性要求 |
+| T4 | 普通包资源/脚本；资源输出pdfx-agent及一次共享项目安装 | 两脚本--help成功；原APM两技能、两脚本、三角色及相邻基准存在。pdfx-agent经mkProject正式apply后，两技能是完整普通文件树，三角色正确映射；Nix专用资源明确调用本仓store包装器，不能仅有store原资源就宣称宿主已发现。已有APM投射结果复用，不启动模型 |
+| T5（仅glance调用变更时） | 可执行glance和Python脚本，既有显式参数/环境变量选择，--ocr、超时与失败 | 在已有unittest框架中只选择本次启动兼容断言；输入为临时fake程序与PNG，检查选中程序、参数、timeout标记及非零退出错误。无需真实OCR或全文件业务回归 |
+| T6（仅增强输出实际发布时） | 固定真实vision-tools/glance及匹配Python依赖的增强安装 | 构建/安装成功，实际安装的glance一次受控启动成功；不测远端模型质量或服务可用性。未发布增强时记“待上游/未执行”，不阻止基础或已完成资源交付。Apple Vision只在对应Darwin能力实际交付时检查 |
 
-**准备与执行**（本地测试工程师按实际 Nix 版本补齐有效运行配置；所有临时产物放在独立 `/tmp` 目录）：
+### 5.1 准备与T1–T3、T4基础资源
+
+本地执行者记录待测生产仓库确切SHA、Nix版本和所用输入锁。先确认已有Nix、jq、Python及TOML解析工具yq（支持`-p toml -o json`）可用；工具缺失只处理对应预检，不安装产品外测试平台。远端仓库读取使用已有认证，不把凭据写入flake/store。默认复用仍有效的安装；下面给出本任务首次安装的完整步骤，复用时引用旧RUN/OUT/profile，不因文档或提交编号变化自动重建。
 
 ```bash
-# 从待测生产仓库读取确切提交，记录为 SHA；不要从 worktrees 或消费者目录取它
+set -euo pipefail
+# 在待测生产仓库读取SHA；不从worktrees或消费者取版本
 SHA=$(git rev-parse HEAD)
 RUN=$(mktemp -d /tmp/pdfx-nix9-XXXXXX)
-mkdir -p "$RUN/consumer"
+mkdir -p "$RUN/consumer" "$RUN/home" "$RUN/codex-home"
+SRC="github:ScholarWorkflow/pdf-processing-core/$SHA"
 cd "$RUN/consumer"
 
-# 从确切 SHA 通过 Nix 正式安装；不要复制生产源码、创建可编辑安装或补改 consumer
-SRC="github:ScholarWorkflow/pdf-processing-core/$SHA"
+# T1：仅构建一次；profile安装复用同一derivation和store产物
 OUT=$(nix build --no-link --print-out-paths "$SRC#pdfx")
 nix profile install --profile "$RUN/profile" "$SRC#pdfx"
+for cmd in pdfx pdfx-formula-repair-runner pdfx-ocr-refresh-jobs; do
+  test -x "$OUT/bin/$cmd"
+done
 
+# T2/T3：同一构建环境，临时普通PDF，没有宿主注册步骤
 "$RUN/profile/bin/pdfx" --help
 "$RUN/profile/bin/pdfx" quality --help
-"$RUN/profile/bin/pdfx-formula-repair-runner" --help
-"$RUN/profile/bin/pdfx-ocr-refresh-jobs" --help
 nix develop "$SRC" --command python -c 'import pdfx, pdfx.quality, pdfx.extract, pdfx.status; print(pdfx.__file__)'
 nix develop "$SRC" --command python -c 'import pymupdf, sys; d=pymupdf.open(); p=d.new_page(); p.insert_text((72,72), "sample"); d.save(sys.argv[1]); d.close()' "$RUN/consumer/sample.pdf"
 "$RUN/profile/bin/pdfx" quality "$RUN/consumer/sample.pdf" --json > "$RUN/quality.json"
 jq -e '.pdf and (.pages | type == "array") and (.pages | length == 1)' "$RUN/quality.json"
 
-# 检查本次 Nix 打包负责的原始技能、角色及相邻基准文件
-test -f "$OUT/share/pdf-processing-core/apm/.apm/skills/formula-repair/SKILL.md"
-test -f "$OUT/share/pdf-processing-core/apm/.apm/skills/formula-repair/formula_repair_runner.py"
-test -f "$OUT/share/pdf-processing-core/apm/.apm/skills/formula-repair/concurrency-benchmark.json"
-test -f "$OUT/share/pdf-processing-core/apm/.apm/skills/llm-ocr-refresh/SKILL.md"
-test -f "$OUT/share/pdf-processing-core/apm/.apm/skills/llm-ocr-refresh/ocr_refresh_jobs.py"
-test -f "$OUT/share/pdf-processing-core/apm/.apm/agents/pdf-to-text.agent.md"
-test -f "$OUT/share/pdf-processing-core/apm/.apm/agents/formula-repair.agent.md"
-test -f "$OUT/share/pdf-processing-core/apm/.apm/agents/llm-ocr-refresh-unit-worker.agent.md"
+# T4基础部分
+"$RUN/profile/bin/pdfx-formula-repair-runner" --help
+"$RUN/profile/bin/pdfx-ocr-refresh-jobs" --help
+APM="$OUT/share/pdf-processing-core/apm/.apm"
+for f in skills/formula-repair/SKILL.md skills/formula-repair/formula_repair_runner.py skills/formula-repair/concurrency-benchmark.json skills/llm-ocr-refresh/SKILL.md skills/llm-ocr-refresh/ocr_refresh_jobs.py agents/pdf-to-text.agent.md agents/formula-repair.agent.md agents/llm-ocr-refresh-unit-worker.agent.md; do
+  test -f "$APM/$f"
+done
 ```
 
-T2 使用上面创建的一页临时 PDF，按 `quality --json` 的既有结果字段检查。不要使用真实论文、个人资料或真实 OCR 凭据。
+直接查看T3打印的模块路径应在Nix安装输出中，不在生产源码或consumer；只记必要结果，不建立额外来源认证。`nix develop`复用同一锁定环境及已有构建缓存，不是再次干净安装。上述普通包检查独立于下一节。
 
-**执行规则**：记录实际 Nix/包/提交版本、测试目录、输入、命令及本项结果；复用已有有效安装，不因提交号或文档更新无条件重装。外部下载/远端服务故障先确认是否属于预检或环境，固定参数最多再尝试一次；已确认无新信息的故障停止重试，受影响项记“无法判断”。业务行为不符合预期记“失败”，不能靠换输入或跳过结果改成通过。原始诊断仅留在独立 `/tmp` 目录，不提交仓库。
+### 5.2 T4资源适配：一次正式mkProject/apply
+
+仅在本次待测SHA已交付pdfx-agent时执行；否则明确记资源适配未交付，不能把整个Issue写成已完成。使用同一RUN下的新项目，不复制产品文件或补改生成配置。下面表达式是消费者正常接入声明，所有产品资源来自固定远端包，不使用生产checkout作为输入。
+
+```bash
+SHARED='github:RekiDunois/agent-env-nix/760c1bf60e8ec19d1985660ec5e3276a8ef80b5a'
+SYSTEM=$(nix eval --impure --raw --expr builtins.currentSystem)
+RESOURCE=$(nix build --no-link --print-out-paths "$SRC#pdfx-agent")
+ENV_OUT=$(nix build --no-link --print-out-paths --expr "
+  let
+    shared = builtins.getFlake \"$SHARED\";
+    producer = builtins.getFlake \"$SRC\";
+    pkgs = shared.inputs.nixpkgs.legacyPackages.\"$SYSTEM\";
+  in shared.lib.mkProject {
+    inherit pkgs;
+    roots = [ producer.packages.\"$SYSTEM\".pdfx-agent ];
+  }")
+PROJECT="$RUN/agent-consumer"
+mkdir -p "$PROJECT"
+HOME="$RUN/home" CODEX_HOME="$RUN/codex-home" \
+  "$ENV_OUT/bin/agent-env" apply --project "$PROJECT"
+
+# 本仓预期导出集合，采用共享环境正式manifest中的资源映射
+jq -e '(.skills | keys) == ["formula-repair","llm-ocr-refresh"] and (.agents | keys) == ["formula-repair","llm-ocr-refresh-unit-worker","pdf-to-text"]' "$ENV_OUT/manifest.json"
+for skill in formula-repair llm-ocr-refresh; do
+  SOURCE=$(jq -r --arg name "$skill" '.skills[$name].source' "$ENV_OUT/manifest.json")
+  test -f "$PROJECT/.agents/skills/$skill/SKILL.md"
+  diff -r "$SOURCE" "$PROJECT/.agents/skills/$skill"
+  # 完整普通文件复制；不以符号链接伪装已安装技能
+  test -z "$(find "$PROJECT/.agents/skills/$skill" -type l -print)"
+done
+for name in pdf-to-text formula-repair llm-ocr-refresh-unit-worker; do
+  yq -p toml -o json "$PROJECT/.codex/agents/$name.toml" |
+    jq -e --arg name "$name" '.name == $name and (.description | type == "string" and length > 0) and (.developer_instructions | type == "string" and length > 0)'
+done
+```
+
+检查两份安装后的SKILL.md及三角色的developer_instructions：应保持既有角色职责/委派目标，Nix专用调用位置分别指向本版本`$OUT/bin/pdfx`及两个脚本包装器的绝对store路径，不依赖uv下载或仅凭runtimePackages假定PATH可用。此处直接人工核对必要命令和角色内容即可，不建新扫描器；脚本能启动已由5.1两个--help覆盖，不重复执行。安装的formula-repair脚本及concurrency-benchmark.json仍相邻。manifest用于定位本仓导出资源，不额外采集全闭包或环境快照。
+
+若祖先或系统配置有同名冲突，记录该环境阻塞并停止此项，不编辑那些配置、不删除已有资源、不绕过共享保护。该故障不反转已成立的普通库/CLI结果。无需再测apply重复性、disable、冲突矩阵、升级/remove、GC或配置保护；这些属于共享库既有验证。
+
+### 5.3 T5调用兼容与T6增强等待项
+
+T5复用`.apm/skills/llm-ocr-refresh/tests/test_ocr_refresh_jobs.py`的unittest、临时目录和fake glance惯例。实现者在同一文件仅补本次启动兼容所需方法：`RFixture.test_nix_glance_executable`、`test_python_glance_script`、`test_glance_selection_priority`、`test_glance_timeout_and_failure`。这些名称只是recipe的示例选择，可复用或合并等价的现有检查，不强制新增四个方法；若实际选择名称不同，执行前同步下面选择列表。它们不是已有通过结果，不运行整个RFixture已有业务套件。
+
+输入/断言约定：可执行fake和非可执行.py各输出固定短文本，必须收到输入PNG及--ocr；显式--glance、OCR_REFRESH_GLANCE和PATH按既有优先级选择对应fake；超时fake超过传入短timeout，断言run_glance的timed_out及unit_timeout；非零退出fake返回预设退出码，断言原glance_exit错误及无成功文本。复用框架断言和subprocess mock/fake，不新建通用设施、不调用真实provider。只覆盖上述直接改变的启动行为，不扩展排列组合或OCR输出质量。
+
+在实施已补齐这些方法后，本地执行者从生产仓库记录测试目录绝对路径；保持执行工作目录在RUN，不把测试源码安装进消费者。T5针对直接修改的调用函数，按既有单元测试方式加载源码，不能用其结果替代T1–T4正式安装结果：
+
+```bash
+# TEST_DIR为待测生产仓库的绝对路径加下述现有测试目录；执行前记录实际值
+: "${TEST_DIR:?设置为待测生产仓库/.apm/skills/llm-ocr-refresh/tests的绝对路径}"
+cd "$RUN/consumer"
+TMPDIR="$RUN" nix develop "$SRC" --command python -c '
+import sys, unittest
+sys.path.insert(0, sys.argv[1])
+names = ["test_nix_glance_executable", "test_python_glance_script", "test_glance_selection_priority", "test_glance_timeout_and_failure"]
+suite = unittest.defaultTestLoader.loadTestsFromNames(["test_ocr_refresh_jobs.RFixture." + n for n in names])
+result = unittest.TextTestRunner(verbosity=2).run(suite)
+raise SystemExit(not result.wasSuccessful())
+' "$TEST_DIR"
+```
+
+T6沿用条件交付。当前方案尚未固定增强输出属性与vision-tools可消费版本，因此本次不虚构完整可执行命令或记为PASS。增强输出发布前，由本地执行者在本节补齐真实输出属性、固定上游SHA、安装命令和受控启动命令，按既有T6目标复核受影响步骤后执行；不阻断T1–T4。一次启动使用实际安装的glance受支持的无模型入口（如其实际支持的--help），验证包装程序能够启动，不把它当作OCR服务或质量通过。若实际入口不提供无模型启动，先按真实上游用法补明确受控方案，不能自行使用真实凭据或绕过程序。Apple Vision仅在实际Darwin增强交付时核对所声明绑定/系统框架，Linux不记录Apple Vision成功。
+
+### 5.4 结果、复用、重试与清理
+
+记录实际SHA、锁定输入、RUN、安装命令及T1–T6逐项结果；不要求额外逐项证据账本。复用有效安装、构建及未受影响PASS，不因文档变更或提交编号改变重复安装。正式首次安装已覆盖本目标，不另建第二套consumer。
+
+外部下载故障先确认属于环境；同一固定SHA/参数最多重试一次，复用已完成store产物。已确认无新信息的故障停止，受影响项记无法判断；业务失败不得通过重试、改输入或放宽预期消除。apply有部分进展或冲突时保留RUN及必要报错，不自动remove或绕过保护；正式重试按共享支持的同项目apply继续，不能借重试改产品行为。保留必要失败输出，临时资料只在独立/tmp；成功且结果已记录后可清理本次独占临时目录，不删除用户配置或其他项目资源。清理不是新增验收项。
+
 
 ## 6. 安全条件、反例和未完成事项
 
