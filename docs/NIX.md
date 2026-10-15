@@ -36,7 +36,7 @@ let
     "github:RekiDunois/agent-env-nix/760c1bf60e8ec19d1985660ec5e3276a8ef80b5a";
   producer = builtins.getFlake
     "github:ScholarWorkflow/pdf-processing-core/<commit>";
-  system = builtins.currentSystem;
+  system = "aarch64-darwin";
   pkgs = shared.inputs.nixpkgs.legacyPackages.${system};
 in
 shared.lib.mkProject {
