@@ -10,16 +10,18 @@
     let
       systems = [ "x86_64-linux" "aarch64-darwin" ];
       eachSystem = nixpkgs.lib.genAttrs systems;
-      productsFor = system:
-        let
-          pkgs = nixpkgs.legacyPackages.${system};
-        in
+      mkPdfPackages = { pkgs, enableHarnesses ? [ "codex" ] }:
         import ./nix/pdfx.nix {
-          inherit pkgs;
+          inherit pkgs enableHarnesses;
           mkAgentPackage = agent-env-nix.lib.mkAgentPackage;
         };
+      productsFor = system: mkPdfPackages {
+        pkgs = nixpkgs.legacyPackages.${system};
+      };
     in
     {
+      lib = { inherit mkPdfPackages; };
+
       packages = eachSystem (system:
         let
           products = productsFor system;
@@ -42,3 +44,4 @@
         });
     };
 }
+
