@@ -113,20 +113,20 @@ RUN_RECIPE
 
 按独立代码 R2 阅读实际三文件 diff 与 APM 原文。本轮没有改 `.apm/`、算法、CLI 或业务输出字段；兼容判断不需要运行未改变的 APM/业务回归。执行者只提交事实，最终 Gate3 由独立审核给出。
 
-## 实际执行记录（2026-10-22 14:29 UTC）
+## T3 首次执行记录（2026-10-22 14:29 UTC；历史记录）
 
 - 产品 SHA：`7ac7bca10206c5481f47ccd89617566cf8a5a065`；Recipe/独立 Gate2 提交：`7bb1e341e3d121dc7e08acdc3761dcf451d0c267`。平台 `x86_64-linux`，Nix 2.35.3，使用上节原命令及现有 namespace 启动器。
 - 单一 RUN：`/tmp/pdf-compose-iWkpcy6c`；本地原始日志 `/tmp/pdf-compose-approved-recipe.log`，命令副本 `/tmp/pdf-compose-approved-recipe.sh`。此处只摘录必要事实，不要求新证据设施。
 - 一次实际尝试：固定远端 pdf-processing-core 产品源码已正常解包；第一个 `nix eval` 在解析原锁定 `agent-env-nix` 输入时退出码 1。实际错误：`unable to download https://github.com/RekiDunois/agent-env-nix/archive/760c1bf60e8ec19d1985660ec5e3276a8ef80b5a.tar.gz: HTTP error 404 (Not Found)`。
 - 目标1：**受阻/无法判断**。`harnesses.json` 未生成有效结果；没有进入 `nix build`、`apply` 或安装资源检查，不能报告实例可消费或资源已落盘。根因界定限于这次环境的锁定输入获取失败，不将 404 推断为产品逻辑失败，也不虚构具体认证原因。
-- 目标2：本轮未执行新运行命令。未改的两包装器只按前节引用既有 Darwin 记录，新的 Exam batch handoff 未执行，不能声称本轮 Linux/Darwin 全部通过。
+- 目标2：T3 首次尝试未执行新运行命令。未改的两包装器只按前节引用既有 Darwin 记录，新的 Exam batch handoff 未执行，不能声称本轮 Linux/Darwin 全部通过。
 - 目标3：已由 R2 完成候选静态读审，未改 APM/业务源；不等于构建或运行通过。
-- 未重试，未修改锁文件、仓库可见性、认证、安全配置或全局配置；没有新增安装工具，没有触及用户 Mac。首次停止时未确认外部条件恢复，未自动重试；后续只读诊断取得同内容源，恢复方案如下，仍待 Gate2 复核。
-- 下游状态：Exam #34 仍只有计划提交；本地消费候选没有虚构新 pin，也没有将仍引用旧输入的不可用代码推送。需要固定上游实际输出可验证后，才能正式接入及更新后续 Contact #131 / Study #16。
+- T3 首次尝试未重试，未修改锁文件、仓库可见性、认证、安全配置或全局配置；没有新增安装工具，没有触及用户 Mac。首次停止时未确认外部条件恢复，未自动重试；后续只读诊断取得同内容源，恢复方案已由独立 R4 通过 Gate2，T4 结果由 R5 审核。
+- T3 当时的下游状态：Exam #34 仍只有计划提交；本地消费候选没有虚构新 pin，也没有将仍引用旧输入的不可用代码推送。当时需待固定上游实际输出可验证后，再正式接入及更新后续 Contact #131 / Study #16。
 
-执行者只记录以上事实；独立 Gate3 结论见测试审核记录。Draft 保持，不给本轮运行 PASS 或 Merge READY。
+以上仅为 T3 首次失败记录，该次尝试仍是无法判断。后续 T4 已由独立 R5 判定本 producer 有限范围 Gate3 PASS；PR 保持 Draft，不代表可合并。
 
-### T4 获取恢复准备（已由独立 R4 通过 Gate2）
+### T4 源缓存恢复方案（已由独立 R4 通过 Gate2，并已按方案执行）
 
 原 Nix GitHub archive URL 的 404 保留，不声称它已恢复。根任务授权只读诊断后，已通过正常 GitHub connector 读取 `760c1bf60e8ec19d1985660ec5e3276a8ef80b5a` 的完整 tree（24 个 blob，无访问拒绝），按原文件内容及执行位还原在 `/tmp/pdf-compose-shared-760`。现有 Nix `hash path` 已实际输出 `sha256-x1of5F3pJ5pc6V3ybv1mVfkLZ6h5rXrla3Ynlq7x2Mw=`，精确匹配产品 `flake.lock` 的原 locked narHash。
 
