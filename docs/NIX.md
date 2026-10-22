@@ -51,6 +51,27 @@ shared.lib.mkProject {
 
 该固定版本的 `agent-env-nix` 仓库为私有仓库。Nix 按普通方式获取锁定输入；若获取返回权限错误，保留并处理 Nix 报出的实际错误。pdf-processing-core 不另做权限预检查，也不会自动更改仓库可见性。
 
+## 同一依赖图中的公共 PDF 实例
+
+`lib.mkPdfPackages { pkgs; enableHarnesses ? [ "codex" ]; }` 返回现有的 `pdfx`、`pdfxAgent` 和 `python`。`python` 是固定的库运行环境，供调用方自己的 batch 包装器使用，不是额外的 flake 包输出。普通 `packages.<system>.pdfx-agent` 也使用此工厂。
+
+在同一个项目中，消费者使用相同 producer 修订、`pkgs`、共享层和 harness 选项，让直接与传递依赖引用同一个公共实例。消费者只声明真实 `agentDependencies`，不要以相同 id 重写公共 PDF agent 的 `files` 或 `exports`，也不要依靠安装顺序覆盖它。不同版本/配置的同名冲突仍由共享层如实拒绝。
+
+```nix
+let
+  pdf = producer.lib.mkPdfPackages { inherit pkgs; };
+in
+shared.lib.mkProject {
+  inherit pkgs;
+  roots = [ pdf.pdfxAgent ];
+}
+```
+
+`enableHarnesses = []` 关闭该 agent 的 Codex 投射，默认仍为 `[ "codex" ]`。Nix 的 `pdf-to-text` 直接执行调用方提供的绝对路径 batch wrapper，保留先 `--check`、缓存与原有结果字段；它不实现调用方的业务 batch。公式修复和 OCR 刷新使用 `pdfx` 包中既有的 store 绝对路径包装器。运行闭包不自动注入 `PATH` 或 `PYTHONPATH`。
+
+只有原角色要求 JSON 的分支使用单个 JSON 最终返回；普通转换的简洁摘要及命令 JSON 明细约定保持不变。
+
 ## 视觉增强
 
 基础 `pdfx` 包不要求 `vision-tools/glance`。只有在 `glance` 及其 Python 依赖有可固定的 Nix 来源并通过对应安装检查后，仓库才会发布增强输出。此输出未交付时，不应把基础包描述成具备完整视觉 OCR 能力。
+

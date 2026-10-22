@@ -1,4 +1,4 @@
-{ pkgs, mkAgentPackage }:
+{ pkgs, mkAgentPackage, enableHarnesses ? [ "codex" ] }:
 
 let
   lib = pkgs.lib;
@@ -88,12 +88,33 @@ let
     else
       throw "${fileName} must have one APM front-matter separator";
 
-  pdfToTextInstructions = builtins.replaceStrings
-    [ "The conversion command is consumer-owned and must use the installable `pdfx` package." ]
-    [ "The conversion command is consumer-owned and must use the installable `pdfx` package. For this Nix-projected role, the consumer command must invoke `${pdfx}/bin/pdfx` for kernel operations; call that absolute path directly and do not assume `pdfx` is present on `PATH`." ]
-    (replaceAgentCommands ../.apm/agents/pdf-to-text.agent.md "pdf-to-text.agent.md");
-  formulaRepairInstructions = replaceAgentCommands ../.apm/agents/formula-repair.agent.md "formula-repair.agent.md";
-  refreshWorkerInstructions = replaceAgentCommands ../.apm/agents/llm-ocr-refresh-unit-worker.agent.md "llm-ocr-refresh-unit-worker.agent.md";
+  # Preserve each role's existing response schema; not every successful role
+  # response is JSON (pdf-to-text also allows a concise conversion summary).
+  codexResponseProtocol = ''
+
+    ## Codex 返回约定
+
+    - 调用工具时不发送进度消息；任务结束时只发送一条最终消息。
+    - 本角色约定要求 JSON 时，最终消息正文只包含一个符合本角色既有字段约定的 JSON 对象，不添加 Markdown 围栏或说明文字。
+    - 澄清请求、错误和受阻状态使用本角色既有字段表示；业务文件仍按本角色原有约定写入。
+  '';
+
+  pdfToTextInstructions = (builtins.replaceStrings
+    [
+      "uv run <consumer-pdf-to-text-command>"
+      "The conversion command is consumer-owned and must use the installable `pdfx` package."
+      "Missing dependencies from `uv run` are reported as-is; do not perform manual installation."
+      "Use shell only for `pwd`, `ls`, `uv`, `file`, `wc`, and `mkdir`."
+    ]
+    [
+      "\"<consumer-pdf-to-text-command>\""
+      "The conversion command is consumer-owned and must use the installable `pdfx` package. In this Nix projection the caller supplies an absolute path to its fixed batch wrapper; execute that wrapper directly, without uv or dependency downloads. The wrapper uses this package's Python library or `${pdfx}/bin/pdfx`; runtimePackages does not add executables to PATH."
+      "Missing runtime dependencies are reported as-is; do not perform manual installation."
+      "Use shell only for the caller-specified fixed `<consumer-pdf-to-text-command>` wrapper, `pwd`, `ls`, `file`, `wc`, and `mkdir`; execute that wrapper directly without uv."
+    ]
+    (replaceAgentCommands ../.apm/agents/pdf-to-text.agent.md "pdf-to-text.agent.md")) + codexResponseProtocol;
+  formulaRepairInstructions = (replaceAgentCommands ../.apm/agents/formula-repair.agent.md "formula-repair.agent.md") + codexResponseProtocol;
+  refreshWorkerInstructions = (replaceAgentCommands ../.apm/agents/llm-ocr-refresh-unit-worker.agent.md "llm-ocr-refresh-unit-worker.agent.md") + codexResponseProtocol;
 
   pdfxAgent = mkAgentPackage {
     inherit pkgs;
@@ -124,10 +145,11 @@ let
       };
     };
     runtimePackages = [ pdfx ];
-    enableHarnesses = [ "codex" ];
+    inherit enableHarnesses;
   };
 in
 {
   inherit pdfx pdfxAgent;
   python = pythonEnvironment;
 }
+
