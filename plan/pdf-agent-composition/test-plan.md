@@ -2,7 +2,7 @@
 
 - Test revision: PDF-COMPOSE-T4 / 2026-10-22。
 - 产品基线 main@3444dca0e0b84f46d1839ab5c707afa78e23d3a7；实现产品为 7ac7bca10206c5481f47ccd89617566cf8a5a065。
-- 对应 [执行计划](execution-plan.md) PDF-COMPOSE-P1。状态：Gate1 已由独立 R1 通过；Gate2 T3 已通过并执行一次受阻；T4 仅补同内容源缓存恢复步骤，待独立复核，未获运行 PASS。
+- 对应 [执行计划](execution-plan.md) PDF-COMPOSE-P1。状态：Gate1 由独立 R1 通过；T3 首次获取受阻保留。T4 受影响 Gate2 由 R4 通过，唯一恢复已退出 0；独立 R5 判定本 producer 范围 Gate3 PASS，见 [审核记录](test-review-record.md) 与 [实际结果](test-results.md)，不代表 Exam/consumer 或合并完成。
 - 规则及需求来源见执行计划，不将旧 issue9 全清单重新打开。
 
 ## 唯一必测清单（上限）
@@ -13,7 +13,7 @@
 
 ## Recipe 与实际执行状态
 
-以下为原 Gate1 冻结的执行约束；本版已在后文补齐 pdfcore 云端 Recipe 并待 Gate2 审核，不增加业务测试：
+以下为原 Gate1 冻结的执行约束；本版已在后文补齐经独立 Gate2 审核并执行的 pdfcore 云端 Recipe，不增加业务测试：
 - 固定已产生的产品 SHA、Nix inputs、实际可运行平台。旧首批验收是 aarch64-darwin；当前作者仅 Linux，未获用户 Mac 执行授权。记录平台限制，不用 Linux 结果冒称 Darwin。
 - 引用仍适用的既有 fixture/最小输入及既有检查命令，填写输入绝对路径、预期字段、公开输出路径、准备/运行命令和 /tmp 独占输出目录。只补目标 1–2 所需值，不另建判定器或测试设施。
 - 如需正式安装，本次改变安装输出，只建一个固定 SHA 的仓外干净 consumer 并复用，不手补产品文件。无关未改部分引用旧结果。
