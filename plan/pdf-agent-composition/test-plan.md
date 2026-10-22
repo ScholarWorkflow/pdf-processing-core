@@ -1,8 +1,8 @@
 # 公共 PDF agent 可组合交付测试计划
 
-- Test revision: PDF-COMPOSE-T3 / 2026-10-22。
+- Test revision: PDF-COMPOSE-T4 / 2026-10-22。
 - 产品基线 main@3444dca0e0b84f46d1839ab5c707afa78e23d3a7；实现产品为 7ac7bca10206c5481f47ccd89617566cf8a5a065。
-- 对应 [执行计划](execution-plan.md) PDF-COMPOSE-P1。状态：Gate1 已由独立 R1 通过；本次 Gate2 Recipe 待独立审核，全部本轮执行未执行。
+- 对应 [执行计划](execution-plan.md) PDF-COMPOSE-P1。状态：Gate1 已由独立 R1 通过；Gate2 T3 已通过并执行一次受阻；T4 仅补同内容源缓存恢复步骤，待独立复核，未获运行 PASS。
 - 规则及需求来源见执行计划，不将旧 issue9 全清单重新打开。
 
 ## 唯一必测清单（上限）
@@ -23,16 +23,16 @@
 
 ## 结果与职责
 
-当前 1–3 均未执行，无 PASS。计划作者提交候选；独立审核者负责 Gate1/Gate2；执行负责人补齐 Recipe 并运行获准项目，记录实际版本/命令/必要输出；审核者按已有方法判断 Gate3。文档 SHA 变化本身不使结果失效。后续 exam 负责真实 batch handoff，最终 Contact+Study 组合只验证一次，不成为本仓重复全业务门槛。
+目标1已尝试但外部输入获取受阻；目标2仅复用未改入口旧记录，新的 Exam handoff 待下游；目标3有 R2 静态复核。本轮没有运行 PASS。计划作者提交候选；独立审核者负责 Gate1/Gate2；执行负责人补齐 Recipe 并运行获准项目，记录实际版本/命令/必要输出；审核者按已有方法判断 Gate3。文档 SHA 变化本身不使结果失效。后续 exam 负责真实 batch handoff，最终 Contact+Study 组合只验证一次，不成为本仓重复全业务门槛。
 
 
 ## 双根交付的唯一记录归属
 
 最终 Contact+Study 联合 roots 的一次组合安装验证由 Study consumer PR 的执行负责人拥有，正式结果写入该 PR 的 plan/pdf-agent-composition/consumer-handoff.md（[Study #16](https://github.com/StudyCoachWorkflow/study-tools/pull/16)；[Contact #131](https://github.com/ScholarWorkflow/professor-contact/pull/131) 引用），Contact PR 只引用同一结果。范围仅为两顶层 roots 经既有共享层合并、公共 PDF 唯一实例及必要资源真实复制，不运行 Contact 邮件或 Study 全业务，不重复 producer 入口验证。这个后续记录不把尚未更新的 consumer 当作本仓独立输出的阻塞项。
 
-## Gate2 Recipe：PDF-COMPOSE-T3（2026-10-22）
+## Gate2 Recipe：PDF-COMPOSE-T4（2026-10-22）
 
-目标产品为 [7ac7bca10206c5481f47ccd89617566cf8a5a065](https://github.com/ScholarWorkflow/pdf-processing-core/commit/7ac7bca10206c5481f47ccd89617566cf8a5a065)，独立代码复核见 [R2](code-review-record.md)。本节为待独立审核的具体 Recipe，不是已执行结果。
+目标产品为 [7ac7bca10206c5481f47ccd89617566cf8a5a065](https://github.com/ScholarWorkflow/pdf-processing-core/commit/7ac7bca10206c5481f47ccd89617566cf8a5a065)，独立代码复核见 [R2](code-review-record.md)。T3 原 Recipe 已通过 Gate2 并执行一次；本版 T4 仅修订源获取准备及复用原 RUN，待受影响步骤复核。实际结果另列如下。
 
 实际环境：当前云端 `x86_64-linux`，复用已有 `/workspace/shared/nix-bootstrap/bin/nix`（已核验 Nix 2.35.3）、`jq` 与 Python；不安装工具、不用用户 Mac、不访问外部视觉/模型服务。该平台已经存在于本仓 flake 输出；此结果只代表 Linux，不宣称 Darwin 实测。输入锁保持产品提交中的 `flake.lock`，共享层仍为 `760c1bf60e8ec19d1985660ec5e3276a8ef80b5a`，Nixpkgs `6510408d147d8c5e6d76043e899e9251756f6a75`。正常远端获取失败时记录实际错误，不添加凭据、不改权限、不换浮动来源。
 
@@ -46,10 +46,16 @@ set -euo pipefail
 NIX=nix
 SHA=7ac7bca10206c5481f47ccd89617566cf8a5a065
 SRC="github:ScholarWorkflow/pdf-processing-core/$SHA"
-RUN=$(mktemp -d /tmp/pdf-compose-XXXXXXXX)
+RUN=/tmp/pdf-compose-iWkpcy6c # 复用 T3 首次尝试的唯一 consumer
 printf '%s\n' "$RUN"
 mkdir -p "$RUN/project" "$RUN/home" "$RUN/codex-home"
 cd "$RUN/project"
+
+# 仅恢复原锁定内容的源缓存，不修改产品、URL、flake.lock 或认证。
+SOURCE_CACHE=/tmp/pdf-compose-shared-760
+EXPECTED_NAR='sha256-x1of5F3pJ5pc6V3ybv1mVfkLZ6h5rXrla3Ynlq7x2Mw='
+test "$("$NIX" hash path "$SOURCE_CACHE")" = "$EXPECTED_NAR"
+"$NIX" store add-path --name source "$SOURCE_CACHE" > "$RUN/shared-source-path.txt"
 
 "$NIX" eval --json --expr "
   let producer = builtins.getFlake \"$SRC\";
@@ -106,3 +112,22 @@ RUN_RECIPE
 ### 目标3：静态兼容结论
 
 按独立代码 R2 阅读实际三文件 diff 与 APM 原文。本轮没有改 `.apm/`、算法、CLI 或业务输出字段；兼容判断不需要运行未改变的 APM/业务回归。执行者只提交事实，最终 Gate3 由独立审核给出。
+
+## 实际执行记录（2026-10-22 14:29 UTC）
+
+- 产品 SHA：`7ac7bca10206c5481f47ccd89617566cf8a5a065`；Recipe/独立 Gate2 提交：`7bb1e341e3d121dc7e08acdc3761dcf451d0c267`。平台 `x86_64-linux`，Nix 2.35.3，使用上节原命令及现有 namespace 启动器。
+- 单一 RUN：`/tmp/pdf-compose-iWkpcy6c`；本地原始日志 `/tmp/pdf-compose-approved-recipe.log`，命令副本 `/tmp/pdf-compose-approved-recipe.sh`。此处只摘录必要事实，不要求新证据设施。
+- 一次实际尝试：固定远端 pdf-processing-core 产品源码已正常解包；第一个 `nix eval` 在解析原锁定 `agent-env-nix` 输入时退出码 1。实际错误：`unable to download https://github.com/RekiDunois/agent-env-nix/archive/760c1bf60e8ec19d1985660ec5e3276a8ef80b5a.tar.gz: HTTP error 404 (Not Found)`。
+- 目标1：**受阻/无法判断**。`harnesses.json` 未生成有效结果；没有进入 `nix build`、`apply` 或安装资源检查，不能报告实例可消费或资源已落盘。根因界定限于这次环境的锁定输入获取失败，不将 404 推断为产品逻辑失败，也不虚构具体认证原因。
+- 目标2：本轮未执行新运行命令。未改的两包装器只按前节引用既有 Darwin 记录，新的 Exam batch handoff 未执行，不能声称本轮 Linux/Darwin 全部通过。
+- 目标3：已由 R2 完成候选静态读审，未改 APM/业务源；不等于构建或运行通过。
+- 未重试，未修改锁文件、仓库可见性、认证、安全配置或全局配置；没有新增安装工具，没有触及用户 Mac。首次停止时未确认外部条件恢复，未自动重试；后续只读诊断取得同内容源，恢复方案如下，仍待 Gate2 复核。
+- 下游状态：Exam #34 仍只有计划提交；本地消费候选没有虚构新 pin，也没有将仍引用旧输入的不可用代码推送。需要固定上游实际输出可验证后，才能正式接入及更新后续 Contact #131 / Study #16。
+
+执行者只记录以上事实；独立 Gate3 结论见测试审核记录。Draft 保持，不给本轮运行 PASS 或 Merge READY。
+
+### T4 获取恢复准备（待独立 Gate2 复核）
+
+原 Nix GitHub archive URL 的 404 保留，不声称它已恢复。根任务授权只读诊断后，已通过正常 GitHub connector 读取 `760c1bf60e8ec19d1985660ec5e3276a8ef80b5a` 的完整 tree（24 个 blob，无访问拒绝），按原文件内容及执行位还原在 `/tmp/pdf-compose-shared-760`。现有 Nix `hash path` 已实际输出 `sha256-x1of5F3pJ5pc6V3ybv1mVfkLZ6h5rXrla3Ynlq7x2Mw=`，精确匹配产品 `flake.lock` 的原 locked narHash。
+
+此准备仅为获取失败恢复，不是新增来源认证或产品测试。T4 仅将这份相同内容加到现有 source cache，再按相同产品/SRC/输入/断言在原 RUN 恢复一次；不使用 override-input，不改锁定依赖版本，不安装新工具，不设置/导出凭据。若原 Nix 解析仍不能使用该缓存，停止并记录，不将 local replacement 冒充原远端成功。两次日志分别保留。
