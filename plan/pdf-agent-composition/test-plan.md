@@ -23,7 +23,7 @@
 
 ## 结果与职责
 
-目标1已尝试但外部输入获取受阻；目标2仅复用未改入口旧记录，新的 Exam handoff 待下游；目标3有 R2 静态复核。本轮没有运行 PASS。计划作者提交候选；独立审核者负责 Gate1/Gate2；执行负责人补齐 Recipe 并运行获准项目，记录实际版本/命令/必要输出；审核者按已有方法判断 Gate3。文档 SHA 变化本身不使结果失效。后续 exam 负责真实 batch handoff，最终 Contact+Study 组合只验证一次，不成为本仓重复全业务门槛。
+目标1的 T3 首次输入获取失败保留为历史；T4 同内容缓存恢复后，已在 x86_64-linux 完成构建、apply 与资源检查，并由独立 R5 判定本 producer 有限范围 Gate3 PASS。目标2仅复用未改入口旧 Darwin 记录，新的 Exam handoff 待下游；目标3由 R2 静态复核覆盖。此结论不代表本修订 Darwin 实跑、原远端获取恢复、下游测试或合并完成。计划作者提交候选；独立审核者负责 Gate1/Gate2；执行负责人补齐 Recipe 并运行获准项目，记录实际版本/命令/必要输出；审核者按已有方法判断 Gate3。文档 SHA 变化本身不使结果失效。后续 exam 负责真实 batch handoff，最终 Contact+Study 组合只验证一次，不成为本仓重复全业务门槛。
 
 
 ## 双根交付的唯一记录归属
@@ -32,7 +32,7 @@
 
 ## Gate2 Recipe：PDF-COMPOSE-T4（2026-10-22）
 
-目标产品为 [7ac7bca10206c5481f47ccd89617566cf8a5a065](https://github.com/ScholarWorkflow/pdf-processing-core/commit/7ac7bca10206c5481f47ccd89617566cf8a5a065)，独立代码复核见 [R2](code-review-record.md)。T3 原 Recipe 已通过 Gate2 并执行一次；本版 T4 仅修订源获取准备及复用原 RUN，待受影响步骤复核。实际结果另列如下。
+目标产品为 [7ac7bca10206c5481f47ccd89617566cf8a5a065](https://github.com/ScholarWorkflow/pdf-processing-core/commit/7ac7bca10206c5481f47ccd89617566cf8a5a065)，独立代码复核见 [R2](code-review-record.md)。T3 原 Recipe 已通过 Gate2 并执行一次；本版 T4 仅修订源获取准备及复用原 RUN，受影响 Gate2 已由独立 R4 通过，单次恢复结果已由 R5 审核。下文保留 T3 首次失败历史，当前 T4 结果见 [实际结果](test-results.md)。
 
 实际环境：当前云端 `x86_64-linux`，复用已有 `/workspace/shared/nix-bootstrap/bin/nix`（已核验 Nix 2.35.3）、`jq` 与 Python；不安装工具、不用用户 Mac、不访问外部视觉/模型服务。该平台已经存在于本仓 flake 输出；此结果只代表 Linux，不宣称 Darwin 实测。输入锁保持产品提交中的 `flake.lock`，共享层仍为 `760c1bf60e8ec19d1985660ec5e3276a8ef80b5a`，Nixpkgs `6510408d147d8c5e6d76043e899e9251756f6a75`。正常远端获取失败时记录实际错误，不添加凭据、不改权限、不换浮动来源。
 
@@ -126,7 +126,7 @@ RUN_RECIPE
 
 执行者只记录以上事实；独立 Gate3 结论见测试审核记录。Draft 保持，不给本轮运行 PASS 或 Merge READY。
 
-### T4 获取恢复准备（待独立 Gate2 复核）
+### T4 获取恢复准备（已由独立 R4 通过 Gate2）
 
 原 Nix GitHub archive URL 的 404 保留，不声称它已恢复。根任务授权只读诊断后，已通过正常 GitHub connector 读取 `760c1bf60e8ec19d1985660ec5e3276a8ef80b5a` 的完整 tree（24 个 blob，无访问拒绝），按原文件内容及执行位还原在 `/tmp/pdf-compose-shared-760`。现有 Nix `hash path` 已实际输出 `sha256-x1of5F3pJ5pc6V3ybv1mVfkLZ6h5rXrla3Ynlq7x2Mw=`，精确匹配产品 `flake.lock` 的原 locked narHash。
 
