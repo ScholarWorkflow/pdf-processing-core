@@ -57,4 +57,4 @@ S4：exam/Contact/Study 后续分别改其真实直接引用；最终联合 root
 
 ## 双根交付的唯一记录归属
 
-最终 Contact+Study 联合 roots 的一次组合安装验证由 Study consumer PR 的执行负责人拥有，正式结果写入该 PR 的 plan/pdf-agent-composition/consumer-handoff.md（实际 PR 产生后补链接），Contact PR 只引用同一结果。范围仅为两顶层 roots 经既有共享层合并、公共 PDF 唯一实例及必要资源真实复制，不运行 Contact 邮件或 Study 全业务，不重复 producer 入口验证。这个后续记录不把尚未更新的 consumer 当作本仓独立输出的阻塞项。
+最终 Contact+Study 联合 roots 的一次组合安装验证由 Study consumer PR 的执行负责人拥有，正式结果写入该 PR 的 plan/pdf-agent-composition/consumer-handoff.md（[Study #16](https://github.com/StudyCoachWorkflow/study-tools/pull/16)；[Contact #131](https://github.com/ScholarWorkflow/professor-contact/pull/131) 引用），Contact PR 只引用同一结果。范围仅为两顶层 roots 经既有共享层合并、公共 PDF 唯一实例及必要资源真实复制，不运行 Contact 邮件或 Study 全业务，不重复 producer 入口验证。这个后续记录不把尚未更新的 consumer 当作本仓独立输出的阻塞项。
