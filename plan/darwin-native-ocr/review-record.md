@@ -39,3 +39,13 @@ Test Gate 3：尚未全部通过，不能声称完整修复已获运行验收。
 Review completeness：COMPLETE（当前候选、计划和已有结果的可判断范围）。
 Merge conclusion：NOT_READY，原因仅为计划内 Darwin 构建/导入及原生 OCR 必测结果未完成；不是额外要求全工作流回归。可按用户授权发布 draft PR，不代表自动合并授权。
 下一步：由获准的 Darwin 执行者按 TP1 完成 T2/T3；未取得环境授权前保持未执行。只复核实际变化及相关结果，不因本记录或文档 SHA 变化重跑 T1。
+
+## OCR-TP2 受影响步骤复核（取代上文 TP1 的步骤批准）
+
+2026-10-23，独立只读复核者复核 `test-plan.md` OCR-TP2，SHA-256 `a36e7109a4a9cfed4e5f14ab9b0e170ef8987c679cbb5a10a02bc57c38229bae`；产品基线 `ce03be88e397db5165aeb9cfbb921d7b3bae3cf6`，产品代码与 OCR-EP1 未改变。
+
+- REVIEW_DEFECT：原 Gate 2 漏审了 T1 正式步骤未包含实际依赖字段检查，以及 T2/T3 后续命令可能掩盖前序失败。上文 TP1 Gate 2 PASS 仅保留为历史，本节 TP2 结论取代该步骤批准；不能把旧步骤视为无缺陷。
+- Gate 1：沿用 PASS，业务目标和必测范围未变。
+- Gate 2：PASS。T1 已补 `nix derivation show`、Nix 2.35.3 的 `structuredAttrs.chosenOutputs[].paths[]` / `inputs.drvs` 字段及锁定版本、Python ABI 观察点；复用已有 T1，不重跑。四个独立 bash 入口分别保存 stdout/stderr 与原始退出码；T2 两版本不互相掩盖，T3 文件查看不覆盖 OCR 失败。
+- Review completeness：COMPLETE；Required modifications：N/A。本轮仅只读复核修正和直接影响，没有执行测试或脚本。
+- EP1 与产品实现结论沿用。Test Gate 3 未整体完成：T2/T3 仍未执行；Merge conclusion 仍为 NOT_READY。下一执行者仅在获准 Darwin 环境按当前 OCR-TP2 完成原有 T2/T3，不因文档提交重跑 T1，不新增回归。
