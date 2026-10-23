@@ -1,7 +1,7 @@
 # Darwin native OCR 独立复核记录
 
 审核时间：2026-10-23 UTC。以下为独立只读复核者提供的结论，不是实现作者自授。
-Requirement revision：2026-10-23 用户授权 core 云端分支、独立执行/测试两计划、实现、推送与新 PR；不操作用户 Mac。
+Requirement revision：2026-10-23 用户授权 core 云端分支、独立执行/测试两计划、实现、推送与新 PR；不操作用户 Mac。此为首次云端审核的历史边界；本轮本机测试授权及结果以 execution-plan.md 的“本轮执行环境授权”和 test-plan.md 的“本轮 Darwin 执行结果”为准。
 Target repository：ScholarWorkflow/pdf-processing-core。
 Base SHA：2be1bf850f29b7ccf7bd1b066ae7292aac33fc87。
 Implementation candidate：candidate.patch SHA-256 134c69b0dfd13630876575bfafebdfaad1ead9649cafe3120292fa8d8fe56ae8。该标识固定审核时的完整七文件候选；之后仅追加本记录与测试结果说明，不影响代码结论。
@@ -49,3 +49,21 @@ Merge conclusion：NOT_READY，原因仅为计划内 Darwin 构建/导入及原�
 - Gate 2：PASS。T1 已补 `nix derivation show`、Nix 2.35.3 的 `structuredAttrs.chosenOutputs[].paths[]` / `inputs.drvs` 字段及锁定版本、Python ABI 观察点；复用已有 T1，不重跑。四个独立 bash 入口分别保存 stdout/stderr 与原始退出码；T2 两版本不互相掩盖，T3 文件查看不覆盖 OCR 失败。
 - Review completeness：COMPLETE；Required modifications：N/A。本轮仅只读复核修正和直接影响，没有执行测试或脚本。
 - EP1 与产品实现结论沿用。Test Gate 3 未整体完成：T2/T3 仍未执行；Merge conclusion 仍为 NOT_READY。下一执行者仅在获准 Darwin 环境按当前 OCR-TP2 完成原有 T2/T3，不因文档提交重跑 T1，不新增回归。
+
+## 本轮本地执行的实现符合性复核（当前）
+
+2026-10-23（北京时间），专用 `implementation_reviewer` 代理在全部测试结果齐备后只读复核，结论为**完整**，当前阶段未发现必须修正或待核实项。此结论仅针对实现符合性，不代表测试第三关或合并批准。
+
+所审产品版本为 `54cb00bd72ad111df17413ff2ebf0056abb0ddc0`，基线为 `2be1bf850f29b7ccf7bd1b066ae7292aac33fc87`；另核对当前工作树中三份计划文档的待提交修改。有效依据为 OCR-EP1、OCR-TP2 及本轮本机执行授权。
+
+已检查整个计划对应产物及必要连接：
+
+- `nix/pyobjc-vision.nix`：CoreML/Vision 使用传入的 Python 包集合，继承同一 pyobjc-core 的源码和版本，依赖关系符合计划。
+- `nix/pdfx.nix`、`flake.nix`：Darwin 绑定进入发行包依赖，再进入公共工厂返回的 Python；CLI、开发环境和两个脚本包装器共用该环境。Linux 条件保留，Python 3.12 覆盖未混入默认版本绑定。
+- `flake.lock`、`docs/NIX.md`：只调整 agent-env 的来源分支声明；锁定版本和依赖关系保留，文档区分原生文字识别与远端视觉增强。
+- 既有 `ocr_apple.py`、提取调用链、发行包入口和脚本连接：原生适配器已接入现有流程，识别算法、远端优先顺序及返回行为未修改。
+- 三份计划与审核记录：前次完整审核覆盖及 TP2 步骤替代关系明确；本轮授权和结果未改变测试范围。
+
+必需结果齐备：T1 沿用已接受且仍适用的通过结果；T2 默认 Python 与 Python 3.12 均构建、导入成功，退出码为 0；T3 单次识别得到 `NATIVE OCR CHECK`，退出码为 0，stderr 为空。复核直接采用既定方法的已有执行结果，未重跑测试或重新认证原始材料。
+
+本轮当前结果取代历史记录中的 T2/T3 未执行状态；原计划及步骤批准沿用，不自行更新正式测试关口或合并结论。下一步由顶层提交推送三份文档，后续测试结果审核和合并审核由相应负责人处理。最终文档提交只加入本轮授权、执行结果和审核记录，不改变所审产品或结果适用性。

@@ -8,6 +8,10 @@
 - 独立测试计划：[test-plan.md](test-plan.md)。本计划不增加其清单外测试。
 - 规则：[Plan Reviewer Rule](https://app.notion.com/p/3e80101a85f3817a94cbc6eca1a76a5c)、[Test Engineer Rule](https://app.notion.com/p/3d80101a85f380d8a8f5ce528141e253)、[Project Consensus](https://app.notion.com/p/3d60101a85f3815a8c43f271f2b4d91d)。
 
+## 本轮执行环境授权
+
+2026-10-23，用户在本地会话调用本地执行工程师，要求完成 PR #12 剩余测试并推送，工作树放在当前项目父目录的 `worktree` 文件夹。本轮据此授权在可用的本机 `aarch64-darwin` 环境执行既有 T2/T3，取代下文历史方案中的“只在云端工作、不操作用户 Mac”限制，仅限这些隔离测试。仍不读取真实材料、不改用户项目或全局配置、不接远端识别服务。OCR-EP1 的产品方案及 OCR-TP2 的目标、输入、命令、判断方式、重试条件均不变；已有 T1 结果继续有效。
+
 ## 目标与边界
 
 让既有 Darwin 原生文字 OCR 在本仓提供的固定 Nix Python 环境中获得其真实直接运行依赖，不要求用户给系统 Python 手装模块或填写远端识别网址。公共工厂返回的 Python、pdfx CLI 及其脚本包装器继续共用同一环境，调用方无需另造 OCR 环境。

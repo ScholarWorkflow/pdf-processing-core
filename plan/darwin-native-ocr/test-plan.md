@@ -1,7 +1,7 @@
 # Darwin 原生 OCR Nix 修复测试计划
 
 - Revision: OCR-TP2；对应 [OCR-EP1](execution-plan.md)，基线 `2be1bf850f29b7ccf7bd1b066ae7292aac33fc87`。
-- Proposed review status: pending。第一关必测清单、第二关步骤的独立结论见 [review-record.md](review-record.md)；第三关尚未整体完成。作者不声明正式 PASS。
+- Proposed review status: pending。第一关必测清单、第二关步骤的独立结论见 [review-record.md](review-record.md)；本轮执行结果见“本轮 Darwin 执行结果”，第三关由测试结果审核者另行判断。作者不声明正式关口通过。
 - 依据：[Test Engineer Rule](https://app.notion.com/p/3d80101a85f380d8a8f5ce528141e253) 与 [Project Consensus](https://app.notion.com/p/3d60101a85f3815a8c43f271f2b4d91d)。不重复共享安装器、完整 Study/Exam 或历史业务回归。
 
 ## 唯一必测清单
@@ -12,7 +12,7 @@
 | T2 | Darwin 上构建公共工厂的默认 Python 与 Python 3.12 环境 | 两环境实际构建成功，均能导入 Quartz、Vision、CoreFoundation、CoreML；调用现有 adapter 的框架加载入口成功，不借系统 Python。若两入口是同一 derivation，复用一次。 |
 | T3 | T2 中默认 Python 的现有 pdfx.ocr_apple；一张自造英文文字 PNG，不配置远端服务 | 既有原生 adapter 实际返回图片中的 `NATIVE OCR CHECK`；只跑一次最小 OCR，不跑真实材料或复杂公式。 |
 
-T1 是打包表达式检查，不代表 T2/T3 通过。仅 T2/T3 在可用、获准的 Darwin 执行环境运行；当前云端为 Linux，不操作用户 Mac。没有合适 Darwin 时明确未执行，仍可提交实现与 draft PR，不宣称可合并。
+T1 是打包表达式检查，不代表 T2/T3 通过。仅 T2/T3 在可用、获准的 Darwin 执行环境运行。初次执行环境为 Linux，故下文保留当时未执行的历史记录；本轮用户已授权在本机 `aarch64-darwin` 完成既有测试，见执行计划“本轮执行环境授权”。这项环境授权取代初次云端执行的限制，不改变 OCR-TP2 的测试步骤或通过条件。没有合适 Darwin 时明确未执行，不宣称可合并。
 
 ## 准备与执行
 
@@ -121,7 +121,24 @@ PYTHON
 - 当前 Linux 无法执行 Darwin 构建/运行时，T2/T3 记未执行；无成功结果不得宣布完整修复验收通过。不得临时借用户 Mac、系统 Python 或虚构远端 endpoint。
 - 不保存用户材料、完整环境快照或额外来源认证。原始日志放 RUN_DIR；仓库仅记录产品/计划版本、命令、简短结果和限制。文档/记录 SHA 变化不自动重跑未受影响项。
 
-## 当前记录
+## 本轮 Darwin 执行结果（当前）
+
+2026-10-23（北京时间），本地执行工程师按本轮用户授权完成 OCR-TP2 的剩余 T2/T3。产品来源固定为已推送的 `github:ScholarWorkflow/pdf-processing-core/54cb00bd72ad111df17413ff2ebf0056abb0ddc0`；测试步骤来自该提交的 OCR-TP2，脚本逐字提取执行。系统为 `aarch64-darwin`（Darwin 25.6.0），Nix 2.34.8。没有修改产品、锁文件、测试输入、命令或通过条件。
+
+| 项目 | 当前结果 | 实际命令与观察 |
+| --- | --- | --- |
+| T1 | 通过，复用 | 复用下文首次云端记录及 `review-record.md` 已接受的结果。本轮仅补运行结果和环境授权说明，未触及打包表达式或依赖声明，未重新执行。 |
+| T2 默认 Python | 通过 | `bash "$RUN_DIR/t2-default.sh"`：Python 3.14.7 固定环境实际构建成功；Quartz、Vision、CoreFoundation、CoreML 与 `_vision_frameworks()` 均导入成功；输出 `native bindings imported`，退出码 0。 |
+| T2 Python 3.12 | 通过 | `bash "$RUN_DIR/t2-312.sh"`：Python 3.12.15 固定环境实际构建成功；同样四个框架与现有适配器入口均导入成功；输出 `native bindings imported`，退出码 0。两个环境分别执行，没有互相替代。 |
+| T3 | 通过 | 默认 T2 成功后，单独运行一次 `bash "$RUN_DIR/t3.sh"`；既定 Helvetica 文字 PNG 经现有 `ocr_png` 返回 `NATIVE OCR CHECK`，退出码 0，stderr 为空。按步骤取消三个远端识别端点变量，没有调用远端识别服务或读取真实材料。 |
+
+本轮 `RUN_DIR=/tmp/pdfx-native-ocr.q7o66lcc`，`SOURCE` 为上述固定提交。准备记录为 `preflight.txt`、`nix-version.txt`、`source.txt`、`runtime.nix`。两个 T2 及 T3 各自保存原始 `*.stdout.log`、`*.stderr.log`、`*.exit-status`；固定环境路径在 `default-path.txt`、`python312-path.txt`，文字结果在 `native-ocr.txt`。原始材料及临时脚本留在仓库外，不推送。
+
+- 默认环境：`/nix/store/asz853r2zacbhdwwq5n8fa7xf9jc9jrd-python3-3.14.7-env`；Python 3.12 环境：`/nix/store/bchcsr0bp4wxklpsna2jjkxr142axjn2-python3-3.12.15-env`。两者均由同一公开工厂构建，没有借用系统 Python 或修补消费者。
+- 默认 T2 首次构建的 Nix 缓存下载曾报告低速超时；Nix 在同一次命令内自动重试后恢复，最终成功。原警告保留在 `t2-default.stderr.log`；没有重新发起正式测试，没有覆盖失败记录。
+- 计划内必测项全部有当前有效通过结果，产品代码无需修正。此处是执行结果，不自行授予测试第三关或合并批准；下一负责人为测试结果审核者。独立实现符合性复核见 `review-record.md` 本轮记录。
+
+## 首次云端执行记录（历史）
 
 2026-10-23 云端 x86_64-linux，Nix 2.35.3；基线与本轮源码见 OCR-EP1。受测完整候选 diff SHA-256：`134c69b0dfd13630876575bfafebdfaad1ead9649cafe3120292fa8d8fe56ae8`；之后仅补本结果区和独立审核记录，不改变产品代码。
 
