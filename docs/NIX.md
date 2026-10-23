@@ -1,8 +1,8 @@
 # Nix 安装
 
-本仓库的 Nix flake 提供普通 `pdfx` 包、开发环境和可选的 Codex 资源包。输入版本由 `flake.lock` 固定；消费者应引用已审核的仓库提交，不要使用浮动分支。
+本仓库的 Nix flake 提供普通 `pdfx` 包、开发环境和可选的 Codex 资源包。输入来源可以跟踪仓库主分支，实际使用的版本仍由 `flake.lock` 固定；运行时不会自动升级，更新版本需要更新锁文件。
 
-当前发行版本为 `0.1.0`。锁文件固定 `agent-env-nix` 到 `760c1bf60e8ec19d1985660ec5e3276a8ef80b5a`，并通过它固定 Nixpkgs 到 `6510408d147d8c5e6d76043e899e9251756f6a75`。包源码仍由消费者选择并固定具体仓库提交。
+当前发行版本为 `0.1.0`。`agent-env-nix` 的输入来源是 `main`；当前锁文件仍固定其到 `760c1bf60e8ec19d1985660ec5e3276a8ef80b5a`，并通过它固定 Nixpkgs 到 `6510408d147d8c5e6d76043e899e9251756f6a75`。本次来源调整不升级这些锁定版本。消费者可声明本仓 `main` 来源，由自己的锁文件选择实际提交；以下固定提交示例同样有效。
 
 ## 普通库和命令
 
@@ -22,7 +22,9 @@ pdfx-ocr-refresh-jobs --help
 
 `pdfx` 包含 `pdfx` 命令、公式修复和 OCR 刷新脚本包装器，以及原 APM 资源树。运行依赖由 Nix 闭包提供，不会在运行时调用 `uv` 下载 Python 包。`nix develop "$SOURCE"` 使用与包构建相同的 Python 环境。
 
-基础包不包含视觉服务、模型或权重。命令存在不代表已配置 OCR 提供者；提供者的配置与凭据由调用环境管理。
+Darwin 的固定 Python 环境包含既有 Apple Vision 文字 OCR 适配器需要的 PyObjC 绑定（Quartz、Vision、CoreFoundation 及依赖 CoreML），公共工厂、CLI 和脚本包装器共用这份闭包，不需给系统 Python 手动安装模块。原生文字 OCR 不要求 `PDFX_LAYOUT_ENDPOINT`、`PDFX_TRANSCRIPTION_ENDPOINT` 或 `PDFX_VISION_ENDPOINT`；Linux 不引入这些 macOS 绑定。
+
+基础包不包含远端视觉服务、外部模型或权重。原生文字 OCR 不等于完整的公式/复杂版面视觉增强；这些可选提供者的配置与凭据仍由调用环境管理，原有 provider 优先与本机 fallback 顺序不变。未配置远端服务不再是 Darwin 本机文字识别的前置缺口，但实际平台构建与识别结果应以对应验证记录为准。
 
 Nix store 中的程序和资源是只读文件。脚本应从调用方的工作目录运行，状态文件、缓存和结果由脚本写入调用方指定的位置。
 

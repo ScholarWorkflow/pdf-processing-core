@@ -2,7 +2,7 @@
   description = "Nix packages for pdf-processing-core";
 
   inputs = {
-    agent-env-nix.url = "github:RekiDunois/agent-env-nix/760c1bf60e8ec19d1985660ec5e3276a8ef80b5a";
+    agent-env-nix.url = "github:RekiDunois/agent-env-nix/main";
     nixpkgs.follows = "agent-env-nix/nixpkgs";
   };
 
