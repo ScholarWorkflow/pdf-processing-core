@@ -10,6 +10,16 @@ let
   pythonPackages = python.pkgs;
   pymupdf = pythonPackages.pymupdf;
   pillow = pythonPackages.pillow;
+  nativeOcrDependencies = lib.optionals pkgs.stdenv.hostPlatform.isDarwin (
+    let
+      bindings = import ./pyobjc-vision.nix { inherit pkgs pythonPackages; };
+    in
+    [
+      pythonPackages.pyobjc-framework-Cocoa # CoreFoundation
+      pythonPackages.pyobjc-framework-Quartz
+      bindings.vision
+    ]
+  );
 
   stagedSource = pkgs.runCommand "scholar-workflow-pdfx-${version}-staged-source" {
     nativeBuildInputs = [ python ];
@@ -27,7 +37,7 @@ let
       pyproject = true;
       src = stagedSource;
       build-system = [ pythonPackages.hatchling ];
-      dependencies = [ pymupdf ];
+      dependencies = [ pymupdf ] ++ nativeOcrDependencies;
       doCheck = false;
     };
 

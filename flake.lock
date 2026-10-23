@@ -17,7 +17,7 @@
       "original": {
         "owner": "RekiDunois",
         "repo": "agent-env-nix",
-        "rev": "760c1bf60e8ec19d1985660ec5e3276a8ef80b5a",
+        "ref": "main",
         "type": "github"
       }
     },
