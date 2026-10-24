@@ -42,6 +42,47 @@ class FormulaRepairRunnerTest(unittest.TestCase):
         return runner.plan(Namespace(pdf=str(self.pdf), source=str(self.source), root=str(self.root),
                                      answer_check=answer_check, force=False))
 
+    def _marker_source(self):
+        folder = self.root / "extraction" / "chapter" / "section"
+        folder.mkdir(parents=True)
+        self.source = folder / "text.md"
+        self.source.write_text("---\nllm_ocr: false\n---\n<!-- PDF_PAGE: 1 -->\nfirst\n"
+                               "<!-- PDF_PAGE: 2 -->\nsecond", encoding="utf-8")
+
+    def test_marker_boundaries_preserve_region_plan(self):
+        self._marker_source()
+        self._faudit({str(i): {"page_verdict": "suspect", "verdicts": [
+            {"verdict": "suspect", "bbox_pt": [0, 0, 5, 5]}]} for i in (1, 2)})
+        self._plan()
+        jobs = list(runner._load_state(self.root)["jobs"].values())
+        self.assertEqual([j["kind"] for j in jobs], ["region"])
+        self.assertEqual([m["page"] for m in jobs[0]["members"]], [1, 2])
+
+    def test_marker_boundaries_allow_partial_collect(self):
+        self._marker_source()
+        self._faudit({str(i): {"page_verdict": "unverified", "verdicts": []} for i in (1, 2)})
+        self._plan()
+        claimed = runner.claim(Namespace(root=str(self.root)))
+        job = runner._load_state(self.root)["jobs"][claimed["job_id"]]
+        Path(job["unit_dir"], "RESULT.json").write_text(json.dumps({
+            "job_id": job["job_id"], "status": "failed", "completed_members": [{"page": 1}],
+            "failed_members": [{"page": 2}], "error_code": "ocr_incomplete",
+        }), encoding="utf-8")
+        runner.collect(Namespace(root=str(self.root)))
+        updated = runner._load_state(self.root)["jobs"][job["job_id"]]
+        self.assertEqual(updated["members"], [{"page": 2}])
+        self.assertEqual(updated["completed_member_count"], 1)
+        # A leading subset is not a complete mapping of the paired two-page PDF.
+        self.source.write_text("---\nllm_ocr: false\n---\n<!-- PDF_PAGE: 1 -->\nfirst\nsecond")
+        job["status"] = "running"
+        job["members"] = [{"page": 1}, {"page": 2}]
+        state = runner._load_state(self.root)
+        state["jobs"][claimed["job_id"]] = job
+        runner._save_state(self.root, state)
+        runner.collect(Namespace(root=str(self.root)))
+        updated = runner._load_state(self.root)["jobs"][job["job_id"]]
+        self.assertEqual(updated["members"], [{"page": 1}, {"page": 2}])
+
     def test_page_jobs_are_capped_at_twelve(self):
         self._faudit({str(i): {"page_verdict": "unverified", "verdicts": []} for i in range(1, 18)})
         self._plan()
@@ -423,6 +464,134 @@ class FormulaRepairRunnerTest(unittest.TestCase):
         runner.collect(Namespace(root=str(self.root)))
         summary = runner.status(Namespace(root=str(self.root)))
         self.assertEqual(summary["job_elapsed_ms"], [{"job_id": job["job_id"], "elapsed_ms": 250.0}])
+
+
+class PrepareHeadingsTest(unittest.TestCase):
+    def setUp(self):
+        import pymupdf
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.pdf = self.root / "section.pdf"
+        self.source = self.root / "text.md"
+        self.fitz = pymupdf
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def _inputs(self, pages, frontmatter="---\nllm_ocr: false\n---\n", body=None):
+        with self.fitz.open() as doc:
+            for text in pages:
+                page = doc.new_page()
+                if text:
+                    page.insert_text((50, 50), text)
+            doc.save(self.pdf)
+        self.pdf.with_suffix(".faudit.json").write_text(json.dumps({
+            "pages": {str(i): {} for i in range(1, len(pages) + 1)}}))
+        raw = frontmatter + ("\n".join(pages) if body is None else body)
+        self.source.write_bytes(raw.encode("utf-8"))
+        return raw.encode("utf-8")
+
+    def _prepare(self):
+        return runner.prepare_headings(Namespace(pdf=str(self.pdf), source=str(self.source)))
+
+    def _assert_page_content(self, pages):
+        from pdfx.scan_math import parse_md_pages
+        lines, mode = parse_md_pages(self.source)
+        self.assertEqual(mode, "explicit")
+        for number, expected in enumerate(pages, 1):
+            got = "\n".join(text for _, text, page in lines
+                            if page == number and not text.startswith("<!-- PDF_PAGE:"))
+            self.assertEqual("".join(got.split()), "".join(expected.split()))
+        path = RUNNER.parents[1] / "llm-ocr-refresh" / "ocr_refresh_jobs.py"
+        spec = importlib.util.spec_from_file_location("refresh_boundary_test", path)
+        refresh = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(refresh)
+        _, body = refresh.split_source_lines(self.source.read_text())
+        mode, sections = refresh.page_sections(body)
+        self.assertEqual(mode, "kakomon")
+        self.assertEqual([key for _, key, _ in sections], list(range(1, len(pages) + 1)))
+        for index, expected in enumerate(pages):
+            start, end = refresh.section_range(sections, index, len(body))
+            self.assertEqual("".join("".join(body[start:end]).split()), "".join(expected.split()))
+
+    def test_recover_actual_pages_not_digit_runs(self):
+        for pages in (["7\nChapter A\n100\n101\nfirst content", "9\nChapter B\nsecond content"],
+                      ["Chapter A\nfirst content\n12345\nextra footer A",
+                       "Chapter B\nsecond content\n12346\nextra footer B"]):
+            with self.subTest(pages=pages):
+                if self.pdf.exists():
+                    self.pdf.unlink()
+                original = self._inputs(pages)
+                result = self._prepare()
+                self.assertEqual(result["status"], "prepared")
+                self.assertEqual(result["headings_added"], 2)
+                self._assert_page_content(pages)
+                updated = self.source.read_bytes()
+                for n in (1, 2):
+                    updated = updated.replace(f"<!-- PDF_PAGE: {n} -->\n\n".encode(), b"")
+                self.assertEqual(updated, original)
+
+    def test_preserve_coordinates_bytes_and_whitespace(self):
+        for metadata in ('PDF物理页码: "44-45"\r\n', ''):
+            with self.subTest(metadata=metadata):
+                if self.pdf.exists():
+                    self.pdf.unlink()
+                pages = ["31\nAlpha beta", "32\nGamma delta"]
+                fm = '---\r\n' + metadata + 'title: "中文"\r\n---\r\n'
+                original = self._inputs(pages, fm, "31\r\nAlpha  beta\r\n32\r\nGamma\tdelta")
+                self.assertEqual(self._prepare()["status"], "prepared")
+                self._assert_page_content(pages)
+                updated = self.source.read_bytes()
+                self.assertNotIn("### 原书".encode(), updated)
+                for n in (1, 2):
+                    updated = updated.replace(f"<!-- PDF_PAGE: {n} -->\n\n".encode(), b"")
+                self.assertEqual(updated, original)
+
+    def test_existing_boundaries_are_idempotent(self):
+        for body, mode in [("<!-- PDF_PAGE: 1 -->\nfirst\n<!-- PDF_PAGE: 2 -->\nsecond", "explicit"),
+                           ("### 原书 p.44\nfirst\n### 原书 p.45\nsecond", "ordinal")]:
+            with self.subTest(mode=mode):
+                if self.pdf.exists():
+                    self.pdf.unlink()
+                original = self._inputs(["first", "second"], body=body)
+                result = self._prepare()
+                self.assertEqual((result["status"], result["boundary_mode"]), ("already_prepared", mode))
+                self.assertEqual(self.source.read_bytes(), original)
+
+    def test_metadata_marker_example_is_not_a_boundary(self):
+        self._inputs(["first", "second"], '---\npage_marker: "<!-- PDF_PAGE: N -->"\n---\n')
+        self.assertEqual(self._prepare()["status"], "prepared")
+        self._assert_page_content(["first", "second"])
+
+    def test_incomplete_boundaries_are_not_prepared(self):
+        for body in ("<!-- PDF_PAGE: 1 -->\nfirst\nsecond",
+                     "<!-- PDF_PAGE: 1 -->\nfirst\n<!-- PDF_PAGE: 1 -->\nsecond",
+                     "### 原书 p.44\nfirst\nsecond"):
+            with self.subTest(body=body):
+                if self.pdf.exists():
+                    self.pdf.unlink()
+                original = self._inputs(["first", "second"], body=body)
+                self.assertEqual(self._prepare()["status"], "needs_boundary_review")
+                self.assertEqual(self.source.read_bytes(), original)
+
+    def test_edited_page_is_reported_without_overwriting(self):
+        original = self._inputs(["x = 2", "second intact page"], body="x = 3\nsecond intact page")
+        result = self._prepare()
+        self.assertEqual(result["status"], "needs_boundary_review")
+        self.assertEqual(result["pages"], [1])
+        self.assertEqual(self.source.read_bytes(), original)
+
+    def test_no_text_layer_is_reported_without_overwriting(self):
+        original = self._inputs(["", "second intact page"], body="OCR first page\nsecond intact page")
+        result = self._prepare()
+        self.assertEqual((result["status"], result["pages"]), ("needs_boundary_review", [1]))
+        self.assertEqual(self.source.read_bytes(), original)
+
+    def test_pdf_audit_count_mismatch_preserves_source(self):
+        original = self._inputs(["first", "second"])
+        self.pdf.with_suffix(".faudit.json").write_text(json.dumps({"pages": {"1": {}}}))
+        self.assertEqual(self._prepare()["status"], "needs_boundary_review")
+        self.assertEqual(self.source.read_bytes(), original)
 
 
 if __name__ == "__main__":

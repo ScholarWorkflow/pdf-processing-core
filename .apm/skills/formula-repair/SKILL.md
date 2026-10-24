@@ -133,3 +133,19 @@ uvx --from 'scholar-workflow-pdfx>=0.1.0,<0.2' pdfx formula-audit "<paired PDF>"
 ## Batch manifest semantics
 
 For a caller-provided list, audit each paired PDF, collect non-ok units, run the bounded queue, and perform one final sweep. The acceptance condition is all source documents clean, all `.faudit.json` regions `ok`, and the source metadata projection updated.
+
+## Legacy page-boundary preparation
+
+For a legacy source without delimiters, run the skill-local runner with
+`prepare-headings --pdf <paired PDF> --source <source md>` before partial repair.
+It reuses complete existing page markers/headings. Otherwise it reads only the
+paired PDF's native text, and inserts `<!-- PDF_PAGE: N -->` when the source
+matches the ordered page text apart from whitespace. N is the paired PDF's
+1-based page index, not an inferred original-book or printed page number.
+Existing source text and metadata are preserved; printed numbers are never
+used as a guessed boundary.
+
+`needs_boundary_review` leaves the source unchanged and reports the pages to
+check in this source. Check only those boundaries; do not reset edited formulas,
+restart whole-source OCR, or treat this as an OCR failure. No extraction/OCR is
+invoked by preparation, and missing native text is not permission to run it.

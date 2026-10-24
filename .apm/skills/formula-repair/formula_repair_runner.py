@@ -155,53 +155,89 @@ def _set_llm_ocr(source_bytes: bytes) -> bytes:
     return ("\n".join(lines) + rest).encode("utf-8")
 
 
-def prepare_headings(args) -> dict:
-    """Add deterministic page boundaries to a legacy source, via the runner.
+def _source_body_start(text: str) -> int:
+    """Skip only a leading YAML block, retaining original character offsets."""
+    lines = text.splitlines(keepends=True)
+    if lines and lines[0].strip() == "---":
+        offset = len(lines[0])
+        for line in lines[1:]:
+            offset += len(line)
+            if line.strip() == "---":
+                return offset
+        raise ValueError("source md frontmatter is not closed")
+    return 0
 
-    Some old textbook extracts retain standalone printed-page numbers but no
-    markdown page headings.  Partial page jobs cannot safely patch such a
-    source.  This structural preparation changes no extracted body text; it
-    only inserts the standard headings before one verified consecutive run of
-    printed-page markers.  The runner remains the sole source writer.
+
+def _page_boundary_mode(text: str, page_count: int) -> str | None:
+    body = text[_source_body_start(text):]
+    markers = re.findall(r"^<!--\s*PDF_PAGE:\s*(\d+)\s*-->[ \t\r]*$", body, re.M)
+    headings = re.findall(r"^### 原书[^\r\n]*", body, re.M)
+    if markers:
+        if not headings and [int(n) for n in markers] == list(range(1, page_count + 1)):
+            return "explicit"
+    elif headings and len(headings) == page_count:
+        return "ordinal"
+    return None
+
+
+def prepare_headings(args) -> dict:
+    """Recover paired-PDF boundaries without guessing from printed numbers.
+
+    Existing delimiters are reused. Legacy text is only prepared when its
+    non-whitespace content equals the paired PDF's native page texts in order.
+    OCR/edited content that cannot be aligned is left entirely unchanged.
     """
+    import pymupdf
+
     source = Path(args.source).resolve()
     pdf = Path(args.pdf).resolve()
     faudit = _json(pdf.with_suffix(".faudit.json"), {})
-    page_count = len(faudit.get("pages") or {})
-    original = source.read_text(encoding="utf-8")
-    if "### 原书" in original:
-        return {"status": "already_prepared", "source": str(source)}
-    if page_count < 1:
-        raise ValueError("no audited pages")
-    lines = original.splitlines(keepends=True)
-    numbers = []
-    for index, line in enumerate(lines):
-        value = line.strip()
-        if re.fullmatch(r"\d{3,4}", value):
-            numbers.append((index, int(value)))
-    run = None
-    for start in range(0, len(numbers) - page_count + 1):
-        candidate = numbers[start:start + page_count]
-        if all(candidate[i][1] + 1 == candidate[i + 1][1] for i in range(page_count - 1)):
-            run = candidate
-            break
-    if run is None:
-        raise ValueError(f"no consecutive printed-page run of length {page_count}")
-    match = re.search(r"PDF物理页码:\s*[\"']?(\d+)", original)
-    pdf_start = int(match.group(1)) if match else run[0][1]
-    inserts = {index: f"### 原书 p.{pdf_start + offset}（印刷页 {printed}）\n\n"
-               for offset, (index, printed) in enumerate(run)}
+    audited_pages = sorted(int(p) for p in (faudit.get("pages") or {}))
+    page_count = len(audited_pages)
+    if not page_count or audited_pages != list(range(1, page_count + 1)):
+        raise ValueError("audit pages must cover paired PDF pages 1..N")
+    original = source.read_bytes().decode("utf-8")
+    body_start = _source_body_start(original)
+    body = original[body_start:]
+    mode = _page_boundary_mode(original, page_count)
+    if mode:
+        return {"status": "already_prepared", "source": str(source), "boundary_mode": mode}
+
+    def review(reason: str, pages: list[int] | None = None) -> dict:
+        return {"status": "needs_boundary_review", "source": str(source),
+                "pages": pages or audited_pages, "reason": reason}
+
+    if re.search(r"^(?:<!--\s*PDF_PAGE:|### 原书)", body, re.M):
+        return review("existing page delimiters are incomplete or conflicting")
+    with pymupdf.open(pdf) as doc:
+        if len(doc) != page_count:
+            return review("paired PDF page count differs from audited pages")
+        page_texts = ["".join(page.get_text().split()) for page in doc]
+    offsets = [index for index, char in enumerate(body) if not char.isspace()]
+    compact = "".join(body[index] for index in offsets)
+    if not all(page_texts) or "".join(page_texts) != compact:
+        # Diagnostic only, never used to choose boundaries. A changed page can
+        # be named without claiming that every other page needs fresh OCR.
+        affected = [page for page, text in enumerate(page_texts, 1)
+                    if not text or compact.count(text) != 1]
+        return review("native page text does not align with source; check boundaries only", affected)
+    inserts = []
+    consumed = 0
+    for page, text in enumerate(page_texts, 1):
+        offset = body_start + offsets[consumed]
+        prefix = "" if offset == 0 or original[offset - 1] == "\n" else "\n"
+        inserts.append((offset, f"{prefix}<!-- PDF_PAGE: {page} -->\n\n"))
+        consumed += len(text)
     updated = []
-    for index, line in enumerate(lines):
-        if index in inserts:
-            updated.append(inserts[index])
-        updated.append(line)
-    data = "".join(updated)
-    if not data.endswith("\n"):
-        data += "\n"
+    previous = 0
+    for offset, marker in inserts:
+        updated.extend((original[previous:offset], marker))
+        previous = offset
+    updated.append(original[previous:])
+    data = "".join(updated).encode("utf-8")
     fd, temp = tempfile.mkstemp(prefix=f".{source.name}.headings.", dir=source.parent)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        with os.fdopen(fd, "wb") as handle:
             handle.write(data)
             handle.flush()
             os.fsync(handle.fileno())
@@ -210,7 +246,7 @@ def prepare_headings(args) -> dict:
         if os.path.exists(temp):
             os.unlink(temp)
     return {"status": "prepared", "source": str(source), "pages": page_count,
-            "printed_page_start": run[0][1], "headings_added": len(run)}
+            "boundary_mode": "explicit", "headings_added": len(inserts)}
 
 
 def normalize_headings(args) -> dict:
@@ -300,7 +336,7 @@ def plan(args) -> dict:
     # so the worker can use the documented whole-body fallback safely.
     if not args.answer_check and "extraction" in source.parts:
         source_text = source.read_text(encoding="utf-8")
-        has_page_headings = "### 原书" in source_text
+        has_page_headings = _page_boundary_mode(source_text, len(faudit.get("pages") or {})) is not None
         audited_pages = sorted(int(p) for p in (faudit.get("pages") or {}))
         all_pages = audited_pages == list(range(1, len(audited_pages) + 1))
         # A legacy source without page headings cannot safely accept a mixed
@@ -627,8 +663,13 @@ def collect(args) -> dict:
             # A partial worker result may only remove members it was assigned.
             if completed_keys and completed_keys <= valid:
                 source = Path(job["source_md"])
-                no_page_headings = (job.get("kind") == "page" and "extraction" in source.parts
-                                    and "### 原书" not in source.read_text(encoding="utf-8"))
+                no_page_headings = False
+                if job.get("kind") == "page" and "extraction" in source.parts:
+                    audited = _json(Path(job["pdf"]).with_suffix(".faudit.json"), {}).get("pages") or {}
+                    pages = sorted(int(page) for page in audited)
+                    page_count = len(pages) if pages == list(range(1, len(pages) + 1)) else 0
+                    no_page_headings = _page_boundary_mode(
+                        source.read_text(encoding="utf-8"), page_count) is None
                 # A legacy source without page headings can only be patched
                 # atomically after the whole page job succeeds.  Do not shrink
                 # a partial result to an unpatchable subset; retry the complete
