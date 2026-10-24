@@ -149,3 +149,12 @@ used as a guessed boundary.
 check in this source. Check only those boundaries; do not reset edited formulas,
 restart whole-source OCR, or treat this as an OCR failure. No extraction/OCR is
 invoked by preparation, and missing native text is not permission to run it.
+
+
+Completed patches from a partial unit result are retained under that unit's
+existing directory before only failed members are retried. Replanning the same
+source preserves them; changed sources or explicit force discard stale offsets.
+Finalization applies all accepted rounds together, then removes transient data.
+A legacy partial job with completion counts but missing retained patches reports
+`partial_results_missing` / `needs_replan`; explicitly replan the complete work
+rather than declaring a last-round-only result repaired.

@@ -89,6 +89,82 @@ class FormulaRepairRunnerTest(unittest.TestCase):
         updated = runner._load_state(self.root)["jobs"][job["job_id"]]
         self.assertEqual(updated["members"], [{"page": 1}, {"page": 2}])
 
+    def _partial_first_page(self):
+        self._faudit({str(i): {"page_verdict": "unverified", "verdicts": []} for i in (1, 2)})
+        self._plan()
+        claimed = runner.claim(Namespace(root=str(self.root)))
+        job = runner._load_state(self.root)["jobs"][claimed["job_id"]]
+        original = self.source.read_bytes()
+        start = original.index(b"first")
+        runner._write_json(Path(job["unit_dir"]) / "RESULT.json", {
+            "job_id": job["job_id"], "status": "failed",
+            "completed_members": [{"page": 1}], "failed_members": [{"page": 2}],
+            "patches": [{"start": start, "end": start + 5, "replacement": "FIRST repaired"}],
+            "error_code": "ocr_incomplete",
+        })
+        runner.collect(Namespace(root=str(self.root)))
+        return job, original
+
+    def test_partial_patches_survive_result_overwrite(self):
+        self._marker_source()
+        pristine = self.source.read_bytes()
+        for replan in (False, True):
+            with self.subTest(replan=replan):
+                runner._state_path(self.root).unlink(missing_ok=True)
+                self.source.write_bytes(pristine)
+                first_job, original = self._partial_first_page()
+                state = runner._load_state(self.root)
+                job = state["jobs"][first_job["job_id"]]
+                self.assertEqual(job["members"], [{"page": 2}])
+                self.assertEqual(self.source.read_bytes(), original)
+                if replan:
+                    self._plan()
+                second = runner.claim(Namespace(root=str(self.root)))
+                self.assertEqual(second["job_id"], first_job["job_id"])
+                second_job = runner._json(Path(second["job_file"]), {})
+                self.assertEqual(second_job["members"], [{"page": 2}])
+                result_path = Path(first_job["unit_dir"]) / "RESULT.json"
+                self.assertFalse(result_path.exists())
+                self.assertEqual(runner.collect(Namespace(root=str(self.root)))["updated"], 0)
+                start = original.index(b"second")
+                runner._write_json(result_path, {
+                    "job_id": first_job["job_id"], "status": "ok",
+                    "completed_members": [{"page": 2}], "failed_members": [],
+                    "patches": [{"start": start, "end": start + 6, "replacement": "SECOND repaired"}],
+                })
+                runner.collect(Namespace(root=str(self.root)))
+                finalize = Namespace(root=str(self.root), pdf=str(self.pdf), audit_command=None, dry_run=False)
+                # Known old-version partial progress cannot silently finish from
+                # only the last RESULT when the earlier patch was already lost.
+                valid_state = runner._load_state(self.root)
+                old_state = json.loads(json.dumps(valid_state))
+                old_state["jobs"][first_job["job_id"]].pop("accepted_results")
+                runner._save_state(self.root, old_state)
+                self.assertEqual(runner.finalize(finalize),
+                                 {"status": "needs_replan", "reason": "partial_results_missing"})
+                self.assertEqual(self.source.read_bytes(), original)
+                runner._save_state(self.root, valid_state)
+                result = runner.finalize(finalize)
+                self.assertEqual(result, {"status": "ok", "patches": 2})
+                expected = original.replace(b"first", b"FIRST repaired").replace(b"second", b"SECOND repaired")
+                expected = expected.replace(b"llm_ocr: false", b"llm_ocr: true")
+                self.assertEqual(self.source.read_bytes(), expected)
+                self.assertFalse(Path(first_job["unit_dir"]).exists())
+
+    def test_partial_patches_reset_on_source_change(self):
+        self._marker_source()
+        first_job, original = self._partial_first_page()
+        changed = original.replace(b"first", b"human changed first")
+        self.source.write_bytes(changed)
+        self._plan()
+        job = runner._load_state(self.root)["jobs"][first_job["job_id"]]
+        self.assertEqual(job["members"], [{"page": 1}, {"page": 2}])
+        self.assertNotIn("accepted_results", job)
+        self.assertNotIn("completed_member_count", job)
+        self.assertEqual(job["source_sha256"], runner._sha(self.source))
+        self.assertFalse(Path(first_job["unit_dir"]).exists())
+        self.assertEqual(self.source.read_bytes(), changed)
+
     def test_page_jobs_are_capped_at_twelve(self):
         self._faudit({str(i): {"page_verdict": "unverified", "verdicts": []} for i in range(1, 18)})
         self._plan()

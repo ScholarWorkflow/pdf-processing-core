@@ -366,8 +366,17 @@ def plan(args) -> dict:
         if existing and existing.get("status") == "running":
             # In-flight unit; never clobber a lane's active work.
             continue
+        if existing and (args.force or source_changed):
+            if existing.get("unit_dir"):
+                shutil.rmtree(existing["unit_dir"], ignore_errors=True)
+            for key in ("accepted_results", "completed_member_count", "unit_dir"):
+                existing.pop(key, None)
+            existing["members"] = job["members"]
+        if existing and _missing_partial_results(existing) and not args.force:
+            existing.update({"status": "degraded", "last_error": "partial_results_missing"})
+            continue
         if existing and existing.get("status") in {"ok", "degraded"} and not args.force:
-            if existing.get("status") == "ok" and source_changed:
+            if source_changed:
                 if existing.get("unit_dir"):
                     shutil.rmtree(existing["unit_dir"], ignore_errors=True)
                 existing.update({"status": "pending", "source_sha256": source_sha,
@@ -387,6 +396,10 @@ def plan(args) -> dict:
             "attempts": keep_attempts if not args.force else 0,
             "faudit_fingerprint": faudit.get("fingerprint"), "created_at": _now(), "last_error": "",
         }
+        if existing and not args.force and not source_changed:
+            for key in ("accepted_results", "completed_member_count", "unit_dir"):
+                if key in existing:
+                    state["jobs"][jid][key] = existing[key]
         planned += 1
     if planned == 0 and not _all_pdf_jobs(state, pdf_key) and _aggregate_verdict(faudit) == "ok" and not args.force:
         # Nothing left to repair (e.g. pending_l3 cleared by the L3 triage);
@@ -413,6 +426,8 @@ def claim(args) -> dict:
     job["started_monotonic_ns"] = _monotonic_ns()
     job_dir = root / ".ocr_units" / hashlib.sha256(job["pdf"].encode()).hexdigest()[:16] / job["job_id"]
     job_dir.mkdir(parents=True, exist_ok=True)
+    # Each claim needs a fresh result; accepted prior patches live separately.
+    (job_dir / "RESULT.json").unlink(missing_ok=True)
     job["unit_dir"] = str(job_dir)
     _save_state(root, state)
     job_file = job_dir / "job.json"
@@ -631,12 +646,31 @@ def _success_result_error(result: dict, members: list[dict]) -> str | None:
     return None
 
 
+def _missing_partial_results(job: dict) -> bool:
+    return bool(job.get("completed_member_count") and not job.get("accepted_results"))
+
+
+def _retain_result(job: dict, result: dict) -> None:
+    """Persist accepted patches before the manifest drops completed members."""
+    names = list(job.get("accepted_results") or [])
+    name = f"accepted-{len(names) + 1:04d}.json"
+    _write_json(Path(job["unit_dir"]) / name, {
+        "source_sha256": job["source_sha256"], "patches": result.get("patches") or [],
+    })
+    names.append(name)
+    job["accepted_results"] = names
+
+
 def collect(args) -> dict:
     root = Path(args.root).resolve()
     state = _load_state(root)
     updated = 0
     for job in state["jobs"].values():
         if job.get("status") != "running" or not job.get("unit_dir"):
+            continue
+        if _missing_partial_results(job):
+            job.update({"status": "degraded", "last_error": "partial_results_missing"})
+            updated += 1
             continue
         result_path = Path(job["unit_dir"]) / "RESULT.json"
         result = _json(result_path, None)
@@ -650,6 +684,7 @@ def collect(args) -> dict:
                 job["status"] = "degraded" if job.get("attempts", 0) >= 3 else "pending"
                 job["last_error"] = contract_error
             else:
+                _retain_result(job, result)
                 job["status"] = "ok"
                 job["completed_at"] = _now()
                 _absorb_result_timing(job, result)
@@ -660,8 +695,15 @@ def collect(args) -> dict:
             valid = {json.dumps(member, sort_keys=True, ensure_ascii=False) for member in original_members}
             completed_keys = {json.dumps(member, sort_keys=True, ensure_ascii=False) for member in completed}
             failed_keys = {json.dumps(member, sort_keys=True, ensure_ascii=False) for member in failed}
-            # A partial worker result may only remove members it was assigned.
-            if completed_keys and completed_keys <= valid:
+            # Partial patches belong only to a valid completed/failed partition.
+            partial_error = _success_result_error(
+                {**result, "failed_members": []}, completed)
+            valid_partial = (isinstance(completed, list) and isinstance(failed, list)
+                             and len(completed_keys) == len(completed)
+                             and len(failed_keys) == len(failed)
+                             and not completed_keys & failed_keys
+                             and completed_keys | failed_keys == valid and not partial_error)
+            if completed_keys and valid_partial:
                 source = Path(job["source_md"])
                 no_page_headings = False
                 if job.get("kind") == "page" and "extraction" in source.parts:
@@ -677,6 +719,8 @@ def collect(args) -> dict:
                 remaining = (original_members if no_page_headings else
                              [member for member in original_members
                               if json.dumps(member, sort_keys=True, ensure_ascii=False) not in completed_keys])
+                if not no_page_headings:
+                    _retain_result(job, result)
                 job["members"] = remaining
                 if not no_page_headings:
                     job["completed_member_count"] = job.get("completed_member_count", 0) + len(completed_keys)
@@ -718,6 +762,8 @@ def finalize(args) -> dict:
     if not aggregate:
         raise ValueError(f"PDF was not planned: {pdf}")
     jobs = _all_pdf_jobs(state, pdf)
+    if any(_missing_partial_results(job) for job in jobs):
+        return {"status": "needs_replan", "reason": "partial_results_missing"}
     if any(job.get("status") == "degraded" for job in jobs):
         aggregate["status"] = "degraded"
         _save_state(root, state)
@@ -734,8 +780,16 @@ def finalize(args) -> dict:
     finalize_started_ns = _monotonic_ns()
     patches = []
     for job in jobs:
-        result = _json(Path(job["unit_dir"]) / "RESULT.json", {})
-        for patch in result.get("patches") or []:
+        retained = job.get("accepted_results") or []
+        results = []
+        for name in retained:
+            result = _json(Path(job["unit_dir"]) / name, None)
+            if result is None or result.get("source_sha256") != aggregate["source_sha256"]:
+                raise ValueError(f"missing or stale accepted patches in {job['job_id']}")
+            results.append(result)
+        if not retained:  # Previously completed jobs without partial progress.
+            results = [_json(Path(job["unit_dir"]) / "RESULT.json", {})]
+        for patch in [patch for result in results for patch in result.get("patches") or []]:
             start, end = patch.get("start"), patch.get("end")
             replacement = patch.get("replacement")
             if not isinstance(start, int) or not isinstance(end, int) or not isinstance(replacement, str):
@@ -783,6 +837,8 @@ def finalize(args) -> dict:
         aggregate["finalize_elapsed_ms"] = round((aggregate["verified_monotonic_ns"] - finalize_started_ns) / 1_000_000, 3)
         for job in jobs:
             shutil.rmtree(job.get("unit_dir", ""), ignore_errors=True)
+            job.pop("accepted_results", None)
+            job.pop("completed_member_count", None)
         _save_state(root, state)
         return {"status": "ok", "patches": len(patches)}
     finally:
