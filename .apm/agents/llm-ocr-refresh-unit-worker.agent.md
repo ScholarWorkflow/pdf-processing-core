@@ -57,6 +57,7 @@ Rules for this contract:
 - `completed_members` and `failed_members` are member-level lists, never only counts.
 - Monotonic fields are mandatory on every result, success or failure; the runner refuses to fabricate elapsed time without them.
 - `ocr_pages` counts pages or bboxes actually OCRed this run. `second_reads` counts enlarged re-reads triggered by `[?]`, conflicts, or broken structure. `events` contains numeric provider-runtime incidents only.
+- On a partial failure, `patches` contains only completed members’ replacements, never a failed member’s unfinished text. The runner retains these patches before retrying the remaining members; the worker must not repeat earlier rounds’ patches.
 - `patches` is the only path by which OCR output reaches the runner. On any incomplete unit, use `status: "failed"` and do not patch the source document.
 
 ## Output
