@@ -47,3 +47,9 @@ T2 仅因 pytest 不可用，改用既有文件 unittest.main 的显式类/方�
 collect 已使用 job.pdf 对应 audit 的连续 1..N 页数，缺失/不连续按 0 页保守拒绝边界；helper 总页数改为必填，各调用点已核。既有 partial_collect 测试加入残缺 marker 时保留两页成员的检查，定向复验 1 test / OK（/tmp/pdfcore-page-boundary-tests-nm9RuU/unittest.log）。其余 9 项沿用首次有效结果；未重跑且无需重跑无关项。
 
 唯一实现 blocker 已关闭。当前工作树有界产品 diff 审核通过；第三关通过，T2 五项目标取得当前有效结果，无范围内未解决缺陷或未完成项。P1–P4、测试设计、第一/第二关维持通过。仍不声称真实 OCR 链或全仓回归通过；无远端 approve、comment、merge、发布操作。下一负责人为 parent/作者，按已有授权交付或决定发布。
+
+## PR #13 发布核对及 CI 单点修正复核
+
+远端 39d933e 的全部 7 文件 patch 与本地 a0de722 一致（仅 diff hunk 函数标签显示不同）。首个 CI 40089795952 终态 failure：95 passed、9 subtests passed，唯一失败为新测试直接 import pdfx 却无 PEP 723 bounded dependency 声明；后续构建验证步骤 skipped，不能声称 CI 通过。
+
+已核本轮 a0de722 工作树修正：仅测试文件顶部 6 行补齐既有 requires-python>=3.11 与 scholar-workflow-pdfx>=0.1.0,<0.2 声明，另补计划/结果记录，无产品或断言变化。既有 runtime boundary 原测试函数无参数和 fixture，runpy 直接调用原函数的定向方法可执行且不放宽 contract；/tmp/pdfcore-pep723-check-8jzahB/check.log 为 PASS。该受影响修正的设计、步骤、结果及 diff 审核通过；原 P1/T2 结论有效沿用。新版远端 CI 仍由 parent 发布后确认，未由 reviewer 重跑或外部写入。

@@ -16,3 +16,12 @@
 - 复验命令：PYTHONPATH=lib python .apm/skills/formula-repair/tests/test_formula_repair_runner.py FormulaRepairRunnerTest.test_marker_boundaries_allow_partial_collect -v。
 - 结果：1 test / OK，exit 0；日志：/tmp/pdfcore-page-boundary-tests-nm9RuU/unittest.log。
 - 原 10 项日志保留；其余不受影响结果沿用。该缺陷由静态审核发现，不能把此前全过测试视为此缺陷已验证。
+
+## PR #13 CI 依赖声明修正
+
+- 首次远端 CI：run 40089795952，head 39d933e，95 passed / 9 subtests passed，唯一失败为 test_runtime_boundary.py::test_pdfx_importers_have_bounded_pep723_dependency。保留该历史失败，不据后续修正覆盖它。
+- 原因：本次测试直接 import pdfx.scan_math，而既有 runtime boundary 用 AST 检查全部 .apm/skills/**/*.py 的 pdfx import；新增测试文件未附 bounded PEP 723 声明。
+- 最小修正：只在该测试文件顶部添加与 runner 相同的 requires-python >=3.11 和 scholar-workflow-pdfx>=0.1.0,<0.2 元数据。产品实现、测试断言与扫描 contract 均不变；原 P1/T2 产品结论沿用。
+- 定向验证：当前 Python 无 pytest，runpy 加载现有 test/test_runtime_boundary.py，直接调用原 test_pdfx_importers_have_bounded_pep723_dependency 函数，保留全部原断言，不另写判定器。
+- 命令：python -c 'import runpy; runpy.run_path("test/test_runtime_boundary.py")["test_pdfx_importers_have_bounded_pep723_dependency"](); print("PASS: test_pdfx_importers_have_bounded_pep723_dependency")'
+- 结果：PASS，exit 0。原始日志：/tmp/pdfcore-pep723-check-8jzahB/check.log。未重跑无关全回归；修正后的远端 CI 尚待 parent 发布后确认。

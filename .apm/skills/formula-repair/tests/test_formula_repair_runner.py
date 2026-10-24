@@ -1,3 +1,9 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "scholar-workflow-pdfx>=0.1.0,<0.2",
+# ]
+# ///
 """No-model regression tests for the formula-repair state machine."""
 
 from __future__ import annotations

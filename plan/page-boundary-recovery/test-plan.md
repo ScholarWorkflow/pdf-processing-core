@@ -22,3 +22,12 @@ Test revision: T2。Requirement R1，Implementation P1，baseline e82dd706cdde11
 - 结果记录实际代码 commit/工作树、命令、passed/failed/unjudged/not-run 与日志位置。仅有界测试通过不是全仓或真实 OCR 链通过；后续独立审核不重新执行。
 
 T2 变化：准备检查发现当前 Python 无 pytest，改用文件已有 unittest 主入口，测试业务目标及断言不变；此前未执行正式测试。
+
+## CI 直接影响补充：依赖声明单项核对
+
+PR #13 首次 CI 发现本次新增 pdfx import 的测试文件缺少既有 PEP 723 bounded dependency 声明；parent 授权最小修复及仅核对此既有检查。补齐文件头声明，不改产品、原断言或全 skills 扫描规则。现有 P1/T2 产品验证结果不受影响并沿用。
+
+当前 Python 无 pytest，直接执行无参数、无 fixture 的原测试函数即可：
+`python -c 'import runpy; runpy.run_path("test/test_runtime_boundary.py")["test_pdfx_importers_have_bounded_pep723_dependency"](); print("PASS: test_pdfx_importers_have_bounded_pep723_dependency")'`
+
+该补充仅核本次修改直接触及的现有 runtime contract，不新增全仓回归或安装测试；输出保存在 /tmp/pdfcore-pep723-check-<run>/check.log，历史 CI 失败记录保留。方法已独立复核。
