@@ -244,6 +244,28 @@ def map_sections(extraction_dir: Path) -> list[dict]:
     return out
 
 
+def _aggregate_sections(mapped_sections: list[dict],
+                        done_pages: dict[int, dict]) -> tuple[list[dict], int]:
+    """Keep physical page numbers attached to their audit results."""
+    sections = []
+    suspect_sections = []
+    for sec in mapped_sections:
+        audited = [(p, done_pages[p]) for p in sec["pages"] if p in done_pages]
+        sus = [p for p, result in audited if result.get("verdict") == "suspect"]
+        ratio = (len(sus) / len(audited)) if audited else 0.0
+        trigger = bool(audited) and ratio >= SECTION_SUSPECT_RATIO
+        item = {"title": sec["title"], "path": str(sec["path"]),
+                "pages": sec["pages"], "audited": len(audited),
+                "suspect_pages": sus, "suspect_ratio": round(ratio, 3),
+                "auto_repair": trigger}
+        sections.append(item)
+        if trigger:
+            suspect_sections.append(item)
+
+    est_repair_sec = sum(len(s["suspect_pages"]) for s in suspect_sections) * REPAIR_EST_SEC_PER_PAGE
+    return sections, est_repair_sec
+
+
 # ---------------------------------------------------------------------------
 # prose region detection (v2 arbitration)
 # ---------------------------------------------------------------------------
@@ -933,23 +955,9 @@ def audit_pdf(pdf_path: str, extraction_dir: str | None = None,
     for v in done_pages.values():
         counts[v["verdict"]] = counts.get(v["verdict"], 0) + 1
 
-    sections = []
-    suspect_sections = []
-    if ext_dir.is_dir():
-        for sec in map_sections(ext_dir):
-            audited = [done_pages[p] for p in sec["pages"] if p in done_pages]
-            sus = [p for p, v in zip(sec["pages"], audited) if v.get("verdict") == "suspect"]
-            ratio = (len(sus) / len(audited)) if audited else 0.0
-            trigger = bool(audited) and ratio >= SECTION_SUSPECT_RATIO
-            item = {"title": sec["title"], "path": str(sec["path"]),
-                    "pages": sec["pages"], "audited": len(audited),
-                    "suspect_pages": sus, "suspect_ratio": round(ratio, 3),
-                    "auto_repair": trigger}
-            sections.append(item)
-            if trigger:
-                suspect_sections.append(item)
-
-    est_repair_sec = sum(len(s["suspect_pages"]) for s in suspect_sections) * REPAIR_EST_SEC_PER_PAGE
+    sections, est_repair_sec = _aggregate_sections(
+        map_sections(ext_dir) if ext_dir.is_dir() else [], done_pages,
+    )
     report = {
         "pdf": pdf_path,
         "fingerprint": fp,
