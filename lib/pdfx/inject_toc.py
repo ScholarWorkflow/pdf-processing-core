@@ -1245,8 +1245,9 @@ def run(
             toc_like = set(llm_entries) if llm_entries else set(toc_phys)
             attached, attach_fail = _attach_unnumbered(
                 doc, list(all_entries), toc_like, shapes)
+            entry_order = {id(entry): index for index, entry in enumerate(all_entries)}
             written = sorted(numbered_entries + attached,
-                             key=lambda e: (e.get("physical") or 0, -e["level"]))
+                             key=lambda e: (e.get("physical") or 0, entry_order[id(e)]))
             attach_info = {"attached": len(attached),
                            "failed": attach_fail}
         else:
