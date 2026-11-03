@@ -244,6 +244,34 @@ def map_sections(extraction_dir: Path) -> list[dict]:
     return out
 
 
+def _aggregate_sections(mapped_sections: list[dict],
+                        done_pages: dict[int, dict]) -> tuple[list[dict], int]:
+    """Keep physical page numbers attached to their audit results."""
+    sections = []
+    suspect_sections = []
+    for sec in mapped_sections:
+        audited = [(p, done_pages[p]) for p in sec["pages"] if p in done_pages]
+        sus = [p for p, result in audited if result.get("verdict") == "suspect"]
+        ratio = (len(sus) / len(audited)) if audited else 0.0
+        trigger = bool(audited) and ratio >= SECTION_SUSPECT_RATIO
+        item = {"title": sec["title"], "path": str(sec["path"]),
+                "pages": sec["pages"], "audited": len(audited),
+                "suspect_pages": sus, "suspect_ratio": round(ratio, 3),
+                "auto_repair": trigger}
+        sections.append(item)
+        if trigger:
+            suspect_sections.append(item)
+
+    est_repair_sec = sum(len(s["suspect_pages"]) for s in suspect_sections) * REPAIR_EST_SEC_PER_PAGE
+    return sections, est_repair_sec
+
+
+def _section_has_unjudgeable_pages(section: dict,
+                                  done_pages: dict[int, dict]) -> bool:
+    return any(done_pages.get(page, {}).get("verdict") == "n/a"
+               for page in section["pages"])
+
+
 # ---------------------------------------------------------------------------
 # prose region detection (v2 arbitration)
 # ---------------------------------------------------------------------------
@@ -823,15 +851,18 @@ def audit_pdf(pdf_path: str, extraction_dir: str | None = None,
             and not force and not deepen_full):
         say("texlayer-audit: sampled-finalized cache hit "
             "(--full extends to the whole book, --force redoes)")
+        report = dict(old_report)
+        _write_audit_result(pdf_path, ext_dir, done_pages,
+                            state.get("arbitrated", {}), report)
         _notify_progress(
             progress_event,
             phase="audit",
-            done=old_report.get("audited_pages", 0),
+            done=report.get("audited_pages", 0),
             total=len(targets),
             failed=0,
             cache_hit=True,
         )
-        return old_report
+        return report
 
     rng = random.Random(fp)
     rng.shuffle(pending)  # randomized streaming order: any prefix is a valid sample
@@ -933,23 +964,6 @@ def audit_pdf(pdf_path: str, extraction_dir: str | None = None,
     for v in done_pages.values():
         counts[v["verdict"]] = counts.get(v["verdict"], 0) + 1
 
-    sections = []
-    suspect_sections = []
-    if ext_dir.is_dir():
-        for sec in map_sections(ext_dir):
-            audited = [done_pages[p] for p in sec["pages"] if p in done_pages]
-            sus = [p for p, v in zip(sec["pages"], audited) if v.get("verdict") == "suspect"]
-            ratio = (len(sus) / len(audited)) if audited else 0.0
-            trigger = bool(audited) and ratio >= SECTION_SUSPECT_RATIO
-            item = {"title": sec["title"], "path": str(sec["path"]),
-                    "pages": sec["pages"], "audited": len(audited),
-                    "suspect_pages": sus, "suspect_ratio": round(ratio, 3),
-                    "auto_repair": trigger}
-            sections.append(item)
-            if trigger:
-                suspect_sections.append(item)
-
-    est_repair_sec = sum(len(s["suspect_pages"]) for s in suspect_sections) * REPAIR_EST_SEC_PER_PAGE
     report = {
         "pdf": pdf_path,
         "fingerprint": fp,
@@ -965,22 +979,53 @@ def audit_pdf(pdf_path: str, extraction_dir: str | None = None,
         "arbitrated_count": len(arbitrated),
         "arbiter_modes": mode_counts,
         "sampling": sampling_info,
-        "formula_zone": "未审计（独立 OCR 对公式均不可靠；数学内容由视觉链修复时顺带恢复）",
-        "sections": [
-            {k: (str(v) if isinstance(v, Path) else v) for k, v in it.items()}
-            for it in sections],
-        "repair_estimate_seconds": est_repair_sec,
-        "soft_gate_exceeded": est_repair_sec > REPAIR_SOFT_GATE_SECONDS,
         "elapsed_s": round(time.time() - t0, 1),
     }
+    _write_audit_result(pdf_path, ext_dir, done_pages, arbitrated, report)
+    _notify_progress(
+        progress_event,
+        phase="audit",
+        done=_completed_page_count(done_pages),
+        total=len(targets),
+        failed=0,
+    )
+    return report
+
+
+def _write_audit_result(pdf_path: str, ext_dir: Path,
+                        done_pages: dict[int, dict], arbitrated: dict,
+                        report: dict) -> None:
+    """Project existing page results onto current sections and write artifacts."""
+    sections, est_repair_sec = _aggregate_sections(
+        map_sections(ext_dir) if ext_dir.is_dir() else [], done_pages,
+    )
+    report.update(
+        pdf=pdf_path,
+        sections=sections,
+        repair_estimate_seconds=est_repair_sec,
+        soft_gate_exceeded=est_repair_sec > REPAIR_SOFT_GATE_SECONDS,
+    )
+    dpi = report["dpi"]
+    report_mode = report["mode"]
+    report.pop("formula_regions_sidecar", None)
+    report.pop("formula_region_total", None)
+    report["formula_zone"] = (
+        "未审计（独立 OCR 对公式均不可靠；数学内容由视觉链修复时顺带恢复）")
 
     # 公式区测绘（路径 A span，零模型成本）：全书区域地图写 per-PDF sidecar，
     # 节 frontmatter 回写区数。失败只降级，不影响审计结论。
     region_counts: dict[int, int] = {}
     try:
         from . import formula_regions as fr
-        regions_data = fr.build_regions(pdf_path, dpi=dpi)
-        report["formula_regions_sidecar"] = str(fr.write_sidecar(pdf_path, regions_data))
+        regions_data = fr.load_sidecar(pdf_path)
+        if (not isinstance(regions_data, dict)
+                or regions_data.get("fingerprint") != fr.fingerprint(pdf_path, dpi)
+                or not isinstance(regions_data.get("pages"), dict)
+                or any(not isinstance(regions_data["pages"].get(str(page)), list)
+                       for page in range(1, report["total_pages"] + 1))):
+            regions_data = fr.build_regions(pdf_path, dpi=dpi, use_layout=False)
+            fr.write_sidecar(pdf_path, regions_data)
+        report["formula_regions_sidecar"] = str(fr.sidecar_path(pdf_path))
         for p_str, regs in (regions_data.get("pages") or {}).items():
             region_counts[int(p_str)] = len(regs)
         report["formula_region_total"] = sum(region_counts.values())
@@ -990,19 +1035,22 @@ def audit_pdf(pdf_path: str, extraction_dir: str | None = None,
     except Exception as e:  # noqa: BLE001
         logger.warning("formula-region mapping failed (non-fatal): %s", e)
 
-    state_out = {"fingerprint": fp, "dpi": dpi, "pages": done_pages,
+    state_out = {"fingerprint": report["fingerprint"], "dpi": dpi, "pages": done_pages,
                  "arbitrated": arbitrated, "report": report}
     if ext_dir.is_dir():
         ext_dir.mkdir(parents=True, exist_ok=True)
+        json_path = ext_dir / AUDIT_JSON_NAME
         json_path.write_text(json.dumps(state_out, ensure_ascii=False, indent=1),
                              encoding="utf-8")
-        _write_metadata_block(ext_dir, report)
+        _write_metadata_block(ext_dir, report, done_pages)
         for sec in sections:
             fm_val = "trusted"
             if sec["audited"] == 0:
                 fm_val = "trusted" if report_mode == "sampled" else "unaudited"
             elif sec["auto_repair"]:
                 fm_val = f"suspect({len(sec['suspect_pages'])}/{sec['audited']} 页)"
+            elif _section_has_unjudgeable_pages(sec, done_pages):
+                fm_val = "unaudited"
             n_regions = sum(region_counts.get(p, 0) for p in sec["pages"])
             if sec["audited"] == 0 and report_mode != "sampled":
                 fq_val = "未审计"
@@ -1013,14 +1061,6 @@ def audit_pdf(pdf_path: str, extraction_dir: str | None = None,
                 _FM_KEY: fm_val,
                 "公式区": fq_val,
             })
-    _notify_progress(
-        progress_event,
-        phase="audit",
-        done=_completed_page_count(done_pages),
-        total=len(targets),
-        failed=0,
-    )
-    return report
 
 
 def _flush_state(json_path: Path, fp: str, dpi: int, done_pages: dict) -> None:
@@ -1035,7 +1075,8 @@ def _flush_state(json_path: Path, fp: str, dpi: int, done_pages: dict) -> None:
         encoding="utf-8")
 
 
-def _write_metadata_block(ext_dir: Path, report: dict) -> None:
+def _write_metadata_block(ext_dir: Path, report: dict,
+                          done_pages: dict[int, dict]) -> None:
     meta_name = os.environ.get("PDFX_METADATA_FILE", "00_book_metadata.md").strip()
     meta = ext_dir / (meta_name or "00_book_metadata.md")
     if not meta.is_file():
@@ -1081,8 +1122,11 @@ def _write_metadata_block(ext_dir: Path, report: dict) -> None:
     ]
     for s in report["sections"]:
         if s["audited"]:
-            verd = ("trusted" if not s["suspect_ratio"]
-                    else f"suspect({len(s['suspect_pages'])}/{s['audited']})")
+            if s["suspect_ratio"]:
+                verd = f"suspect({len(s['suspect_pages'])}/{s['audited']})"
+            else:
+                verd = ("unaudited" if _section_has_unjudgeable_pages(s, done_pages)
+                        else "trusted")
         else:
             verd = "trusted*" if mode == "sampled" else "unaudited"
         block_lines.append(
