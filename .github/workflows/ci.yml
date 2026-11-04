@@ -13,7 +13,10 @@ jobs:
         with:
           version: latest
       - name: Run tests
-        run: uv run --with pytest,pymupdf --with "agent-vision-runtime @ git+https://github.com/ScholarWorkflow/base-skills@c2a7230606c9f3be39de400fae0f5cde62ee5b0e#subdirectory=.apm/skills/vision-tools" pytest -q lib/pdfx .apm/skills/formula-repair/tests .apm/skills/llm-ocr-refresh/tests test
+        # The shared vision runtime lives in a private repository that this
+        # public runner cannot clone; its tests skip when the module is absent.
+        # Shared-runtime coverage runs locally and in the Nix package check.
+        run: uv run --with pytest,pymupdf pytest -q lib/pdfx .apm/skills/formula-repair/tests .apm/skills/llm-ocr-refresh/tests test
       - name: Build root compatibility project
         run: |
           rm -rf "$RUNNER_TEMP/pdf-processing-core-dist"

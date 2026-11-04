@@ -1,13 +1,30 @@
 # Local validation observations
 
-2026-11-04, cloud x86_64-linux, CPython 3.12.14. Core implementation is based on `0d2348a1438edba24f966b86ab41c16bc4015edd`; shared runtime source is base-skills PR9 `c2a7230606c9f3be39de400fae0f5cde62ee5b0e`. These are execution observations, not an author-awarded approval or Nix/Darwin result.
+Core implementation is based on `0d2348a1438edba24f966b86ab41c16bc4015edd`. Shared runtime source is base-skills PR9 `c2a7230606c9f3be39de400fae0f5cde62ee5b0e`. These are execution observations, not an author-awarded approval.
 
 ## Final Python observations
 
 - Repository command: `uv run --with pytest,pymupdf --with <base-checkout>/.apm/skills/vision-tools pytest -q lib/pdfx .apm/skills/formula-repair/tests .apm/skills/llm-ocr-refresh/tests test`. Result: 108 passed and 11 subtests passed. All eight shared-runtime tests are included; no remote model or credentials are used.
+- Without the optional shared runtime installed, the same command reports 100 passed, 8 skipped and 11 subtests passed. The eight skips are the shared-runtime module, which requires `vision_client`; `pytest.importorskip` covers the non-Nix installation case.
 - Built the staged `scholar-workflow-pdfx` wheel and the `agent-vision-runtime` wheel. Installed both in a fresh temporary virtual environment with their declared dependencies.
 - Outside both checkouts, with PYTHONPATH unset: the existing `check_release_install.py` completed, `pdfx ocr-image --help` completed, and all eight shared-runtime tests passed against installed modules. This includes a real core subprocess calling only the loopback HTTP fixture and receiving model metadata.
 - `git diff --check` completed without whitespace errors.
+
+## Darwin Nix observations, 2026-11-04
+
+Local machine: `aarch64-darwin`, Nix 2.34.8. `flake.lock` now records the base input pinned to `c2a7230606c9f3be39de400fae0f5cde62ee5b0e`; `nix flake check --no-build` passes for `aarch64-darwin`.
+
+- `nix build .#packages.aarch64-darwin.pdfx --no-link` succeeded; built `/nix/store/mw1swrxrznbdsy7dsmkrl9cz635q04ws-pdf-processing-core-0.1.0`.
+- The built package ships `bin/pdfx`, `bin/pdfx-formula-repair-runner` and `bin/pdfx-ocr-refresh-jobs`; its Python environment contains `vision_client.py`.
+- With `PYTHONPATH` unset, the built `pdfx ocr-image` read a local `VISION_ENV_FILE` and returned `fixture-ocr-text` from a loopback OpenAI-compatible fixture; the core subprocess path and `pdfx-ocr-refresh-jobs --help` both ran.
+- This is a Darwin build and run of the package. It does not establish Linux Nix evaluation or execution.
+
+## CI workflow correction
+
+The prior CI step cloned base-skills for the `agent-vision-runtime` requirement. That repository is private and the public runner has no credential for it, so the run failed during dependency resolution without executing tests. The step now runs the repository suite without the cross-repository requirement; shared-runtime tests skip there and are covered locally and by the Nix package check.
+
+- The current step command was executed locally with the surrounding environment cleared: 100 passed, 8 skipped, 11 subtests passed.
+- The remaining CI steps (root build, staged release build, wheel and sdist install checks, wheel-environment skill tests, `check_skill_runtime.py`) were run locally against the same tree and all completed without error.
 
 ## Retained failure classification
 
@@ -15,4 +32,4 @@ The old interrupted test attempt only logged package building; no result is infe
 
 ## Still incomplete
 
-The cloud environment has no Nix executable. The candidate flake selects the exact base PR9 revision but `flake.lock` does not yet contain the new input. After base is merged, restore its source to main, generate the lock normally, and validate the actual public Nix package. No Linux Nix build, Darwin execution, real OCR quality, downstream workflow regression, final merge approval or consumer readiness is claimed.
+The public Nix package is validated only on `aarch64-darwin`; no Linux Nix build was executed. After base-skills #9 merges, its flake source returns to `main` and the lock is regenerated normally. Real OCR quality, downstream workflow regression, final merge approval and consumer readiness are not claimed.

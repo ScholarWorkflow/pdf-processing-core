@@ -43,6 +43,30 @@
         "type": "github"
       }
     },
+    "base-skills": {
+      "inputs": {
+        "agent-env-nix": [
+          "agent-env-nix"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1793733659,
+        "narHash": "sha256-VJNs7qHg/E3cP3U6G1VXaPXXYuPPkFcKRLmotIMCa18=",
+        "owner": "ScholarWorkflow",
+        "repo": "base-skills",
+        "rev": "c2a7230606c9f3be39de400fae0f5cde62ee5b0e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ScholarWorkflow",
+        "repo": "base-skills",
+        "rev": "c2a7230606c9f3be39de400fae0f5cde62ee5b0e",
+        "type": "github"
+      }
+    },
     "mcp-servers": {
       "inputs": {
         "nixpkgs": [
@@ -84,6 +108,7 @@
     "root": {
       "inputs": {
         "agent-env-nix": "agent-env-nix",
+        "base-skills": "base-skills",
         "nixpkgs": [
           "agent-env-nix",
           "nixpkgs"
