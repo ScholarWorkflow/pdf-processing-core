@@ -77,4 +77,4 @@ shared.lib.mkProject {
 
 公共 `pdfx` 工厂包含 base-skills 的轻量 `agent-vision-runtime`，不依赖整个 macOS vision agent 或浏览器工具。提供者的本地配置、兼容路径和非 Nix 安装说明见 [共享 OCR 配置](SHARED_VISION.md)。凭据始终只在运行时读取，不放入 flake 或 Nix store。
 
-本改动需要固定并验证提供 `mkVisionRuntime` 的 base 上游提交；尚未完成对应 Nix 构建前，不能声称平台安装已验证。已有原生 OCR 的平台边界保持不变。
+`mkVisionRuntime` 来自已合并的 base-skills `main`，由 `flake.lock` 固定到实际提交；公共包已在 `aarch64-darwin` 构建并跑通 `pdfx ocr-image`。Linux 与真实模型质量未验证。`base-skills` 当前是私有仓库，无凭据的机器在取输入阶段会被拒绝。已有原生 OCR 的平台边界保持不变。

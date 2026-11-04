@@ -82,13 +82,18 @@ def default_glance_path() -> Path:
     override = os.environ.get("OCR_REFRESH_GLANCE", "").strip()
     if override:
         return Path(override).expanduser()
-    # Keep old non-Nix deployments with an independently installed glance working.
+    # The installed core module is the default OCR entry. Older pdfx
+    # distributions do not ship it, so an independently installed glance
+    # stays usable; the shared runtime alone does not make that module exist.
     import importlib.util
-    if importlib.util.find_spec("vision_client") is None:
+    if importlib.util.find_spec("pdfx.ocr_image") is None:
         executable = shutil.which("glance")
         if executable:
             return Path(executable)
-    # Use the installed core module, not a consumer-specific glance on PATH.
+        raise JobError(
+            "glance_missing",
+            "no core OCR module is installed and no glance executable is on PATH",
+        )
     from pdfx import ocr_image
     return Path(ocr_image.__file__)
 

@@ -528,15 +528,31 @@ class RFixture(unittest.TestCase):
             ).strip(),
             "environment-glance",
         )
-        # PATH fallback is the legacy installation contract, only when the
-        # optional shared client is absent. Installed-client default routing
-        # is exercised by test_shared_vision_runtime's real subprocess test.
+        # PATH fallback is the legacy installation contract: it applies when
+        # the installed pdfx lacks the core OCR module, whether or not the
+        # optional shared client is present. Installed-core default routing is
+        # exercised by test_shared_vision_runtime's real subprocess test.
         real_find_spec = importlib.util.find_spec
         with patch("importlib.util.find_spec", side_effect=lambda name, *a, **kw:
-                   None if name == "vision_client" else real_find_spec(name, *a, **kw)):
+                   None if name == "pdfx.ocr_image" else real_find_spec(name, *a, **kw)):
             self.assertEqual(
                 self.run_batch_with_glance_selection(
                     "path-selection",
+                    explicit_glance=None,
+                    environment_glance=None,
+                    path_dir=bin_dir,
+                ).strip(),
+                "path-glance",
+            )
+        # An installation carrying only the shared runtime must fall back to
+        # PATH glance instead of importing a core module it does not have.
+        with patch("importlib.util.find_spec", side_effect=lambda name, *a, **kw:
+                   importlib.util.ModuleSpec(name, None) if name == "vision_client"
+                   else None if name == "pdfx.ocr_image"
+                   else real_find_spec(name, *a, **kw)):
+            self.assertEqual(
+                self.run_batch_with_glance_selection(
+                    "shared-only-install",
                     explicit_glance=None,
                     environment_glance=None,
                     path_dir=bin_dir,

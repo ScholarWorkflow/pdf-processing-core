@@ -12,4 +12,4 @@ PDF OCR configuration and transport belong to core plus the base shared vision c
 
 ## Integration prerequisite
 
-The base runtime branch must be reviewed and made available as a fixed upstream input before the core Nix package is ready. A draft referring to unavailable main functionality is not installable evidence. Nix builds and actual external model quality are not implied by Python tests.
+The base runtime branch must be merged and available as a fixed upstream input before the core Nix package is ready. base-skills #9 merged as `665dc0c1ed0ee25fb26062f101c69d9f51079e95`; the flake source now points at base-skills `main` and the lock records that commit. The base-skills repository remains private, so evaluation requires credentials. Nix builds and actual external model quality are not implied by Python tests.

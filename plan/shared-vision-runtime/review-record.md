@@ -9,11 +9,17 @@ Independent read-only review examined the complete candidate diff and extraction
 
 Status: NOT_READY pending upstream integration and final merge-constraint verification. The user explicitly authorized local dependency installation, tests and simulated HTTP services on 2026-11-04. Python observations are recorded in test-results.md; they are not a final independent approval. No external service/model was called.
 
-Base runtime candidate: `c2a7230606c9f3be39de400fae0f5cde62ee5b0e` ([base #9](https://github.com/ScholarWorkflow/base-skills/pull/9)). The flake source selects that candidate; after upstream merge, restore the source to main and generate its lock. CI no longer clones this private repository, so its shared tests skip there and run locally and in the Nix package check.
+Base runtime: [base #9](https://github.com/ScholarWorkflow/base-skills/pull/9) merged to `main` as `665dc0c1ed0ee25fb26062f101c69d9f51079e95`. The flake source now points at base-skills `main` and the lock records that commit. CI no longer clones this private repository, so its shared tests skip there and run locally and in the Nix package check.
 
 The flake lock now records the pinned base input, and the public Nix package was evaluated, built and executed on aarch64-darwin; details are in test-results.md. Required remaining evidence: upstream integration and Linux Nix evaluation.
 
 The updated fast-review criteria allow one bounded independent review after this evidence exists. No downstream full-business regression, source certification, blanket matrix, approval or merge is claimed or requested here.
+
+## Post-merge repin and fallback correction, 2026-11-04
+
+base-skills #9 merged; the earlier pinned commit `c2a7230` predated two follow-up commits that restored gzip response decoding, `stream: false`, and non-retrying daily-quota 429 handling, and corrected chain metadata. The flake input now follows base-skills `main` and `flake.lock` records `665dc0c1ed0ee25fb26062f101c69d9f51079e95`. The public package was rebuilt, and its environment now contains the gzip/stream handling; a loopback fixture returning a gzip-encoded body with `stream: false` was decoded through `pdfx ocr-image`.
+
+`default_glance_path()` previously branched on `vision_client` being absent. The real compatibility condition is whether the installed core ships `pdfx.ocr_image`: the published `scholar-workflow-pdfx 0.1.0` wheel has neither that module nor `ocr-image`, so installing only the shared runtime still failed. The check now tests `pdfx.ocr_image` and raises `glance_missing` when neither the module nor a PATH glance exists. The PATH-selection case was corrected to model the actual no-module installation, and a second case covers a shared-runtime-only installation. Both were confirmed against the published wheel in an isolated environment: the old branch raised ImportError there, the new branch returns the PATH glance.
 
 ## Follow-up bounded review, 2026-11-04
 

@@ -3,9 +3,7 @@
 
   inputs = {
     agent-env-nix.url = "github:RekiDunois/agent-env-nix/main";
-    # Review candidate from base-skills #9; return source to main after merge
-    # and preserve the selected revision in flake.lock.
-    base-skills.url = "github:ScholarWorkflow/base-skills/c2a7230606c9f3be39de400fae0f5cde62ee5b0e";
+    base-skills.url = "github:ScholarWorkflow/base-skills/main";
     base-skills.inputs.agent-env-nix.follows = "agent-env-nix";
     base-skills.inputs.nixpkgs.follows = "nixpkgs";
     nixpkgs.follows = "agent-env-nix/nixpkgs";

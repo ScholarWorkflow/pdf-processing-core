@@ -8,14 +8,14 @@ Use the client's `VISION_BASE_URL`, `VISION_API_KEY`, `VISION_MODEL`, optional `
 
 Existing `PDFX_<ROLE>_ENDPOINT` or `PDFX_VISION_ENDPOINT` take precedence for that role and remain complete URLs using the previous OpenAI image-completion contract. Existing model overrides are preserved. `PDFX_LAYOUT_ENDPOINT` for structured box detection still requires the existing multipart `{width,height,boxes}` service: a general vision endpoint is not a substitute. A shared vision configuration alone does not add that service.
 
-`pdfx ocr-image page.png` transcribes one rendered image. `pdfx extract` keeps text/clean/native decisions and provider order unchanged. Its dedicated layout OCR adapter requires an explicit legacy endpoint or `PDFX_LAYOUT_MODEL`; with only generic shared VISION configuration it falls through to the transcription adapter, whose OCR/LaTeX prompt is preserved. An empty dedicated-layout prompt is never silently sent to an unspecified general model. The refresh runner defaults to core's image OCR subprocess. Explicit `--glance` and `OCR_REFRESH_GLANCE` remain compatibility overrides; old non-Nix installations without the shared runtime retain PATH glance fallback.
+`pdfx ocr-image page.png` transcribes one rendered image. `pdfx extract` keeps text/clean/native decisions and provider order unchanged. Its dedicated layout OCR adapter requires an explicit legacy endpoint or `PDFX_LAYOUT_MODEL`; with only generic shared VISION configuration it falls through to the transcription adapter, whose OCR/LaTeX prompt is preserved. An empty dedicated-layout prompt is never silently sent to an unspecified general model. The refresh runner defaults to core's image OCR subprocess. Explicit `--glance` and `OCR_REFRESH_GLANCE` remain compatibility overrides; older pdfx distributions without the core OCR module retain PATH glance fallback, whether or not the shared runtime is installed.
 
-Non-Nix installations may install the lightweight runtime distribution from the reviewed base-skills commit using its `.apm/skills/vision-tools` Python subproject. For the current reviewed candidate:
+Non-Nix installations may install the lightweight runtime distribution from the merged base-skills commit using its `.apm/skills/vision-tools` Python subproject. The base-skills repository is private, so this pull needs credentials:
 
 ```sh
-uv pip install "agent-vision-runtime @ git+https://github.com/ScholarWorkflow/base-skills@c2a7230606c9f3be39de400fae0f5cde62ee5b0e#subdirectory=.apm/skills/vision-tools"
+uv pip install "agent-vision-runtime @ git+https://github.com/ScholarWorkflow/base-skills@665dc0c1ed0ee25fb26062f101c69d9f51079e95#subdirectory=.apm/skills/vision-tools"
 ```
 
-This is a separate optional dependency until published: existing text/native and explicit PDFX endpoint installations continue to work without it. No unpublished PyPI availability is assumed.
+This is a separate optional dependency until published: existing text/native and explicit PDFX endpoint installations continue to work without it. The runtime alone does not add core's `pdfx ocr-image`; that arrives with the next pdfx release. No unpublished PyPI availability is assumed.
 
 Consumers must use core's public `lib.mkPdfPackages` factory to inherit its shared runtime. Historical direct imports of `nix/pdfx.nix` still work but require its `visionRuntime` argument to gain this capability; those migrations are separate PRs.
