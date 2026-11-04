@@ -16,7 +16,12 @@
       mkPdfPackages = { pkgs, enableHarnesses ? [ "codex" ] }:
         import ./nix/pdfx.nix {
           inherit pkgs enableHarnesses;
-          visionRuntime = base-skills.lib.mkVisionRuntime { inherit pkgs; python = pkgs.python3; };
+          # base-skills exposes the runtime for Darwin only, so Linux keeps the
+          # pre-existing package without it instead of failing evaluation.
+          visionRuntime =
+            if pkgs.stdenv.hostPlatform.isDarwin
+            then base-skills.lib.mkVisionRuntime { inherit pkgs; python = pkgs.python3; }
+            else null;
           mkAgentPackage = agent-env-nix.lib.mkAgentPackage;
         };
       productsFor = system: mkPdfPackages {

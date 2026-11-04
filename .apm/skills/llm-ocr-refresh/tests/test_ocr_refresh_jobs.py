@@ -560,6 +560,16 @@ class RFixture(unittest.TestCase):
                 "path-glance",
             )
 
+    def test_missing_core_module_and_glance_reports_glance_missing(self):
+        real_find_spec = importlib.util.find_spec
+        with patch("importlib.util.find_spec", side_effect=lambda name, *a, **kw:
+                   None if name in ("pdfx.ocr_image", "vision_client")
+                   else real_find_spec(name, *a, **kw)), \
+                patch("shutil.which", return_value=None):
+            with self.assertRaises(R.JobError) as raised:
+                R.default_glance_path()
+        self.assertEqual(raised.exception.code, "glance_missing")
+
     def test_glance_timeout_and_failure(self):
         png = self.sample_png()
         slow = self.write_launch_fake(

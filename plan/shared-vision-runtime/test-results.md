@@ -20,7 +20,7 @@ Local machine: `aarch64-darwin`, Nix 2.34.8. `flake.lock` records the base input
 - With `PYTHONPATH` unset, the built `pdfx ocr-image` read a local `VISION_ENV_FILE` and returned `fixture-ocr-text` from a loopback OpenAI-compatible fixture.
 - A second loopback fixture returned a gzip-encoded body and recorded the request payload: `pdfx ocr-image` returned `gzip-ok stream-false`, so both the decoding and the non-streaming payload request work through core.
 - A `pdfx-ocr-refresh-jobs --help` run and the core subprocess path also completed.
-- This is a Darwin build and run of the package. It does not establish Linux Nix evaluation or execution.
+- This is a Darwin build and run of the package. Its earlier statement that Linux evaluation was unverified was superseded on 2026-11-05; see the platform section below.
 
 ## CI workflow correction
 
@@ -39,8 +39,23 @@ The published `scholar-workflow-pdfx 0.1.0` wheel from PyPI (uploaded 2026-09-07
 
 - In that environment the previous branch (`vision_client` absent) raised `ImportError: cannot import name 'ocr_image' from 'pdfx'`; a PATH glance was never consulted.
 - The corrected branch returns the PATH glance for the same environment.
-- The repository test now models exactly this installation and also covers the no-module, no-glance case via `glance_missing`.
+- The repository test now models exactly this installation, and `test_missing_core_module_and_glance_reports_glance_missing` covers the no-module, no-glance case by asserting the `glance_missing` code.
+
+## Linux platform evaluation, 2026-11-05
+
+The repin to merged base made `nix flake check --all-systems --no-build` fail: base-skills narrowed `agent-vision-runtime` to `aarch64-darwin` (`f513472`), while core exported `x86_64-linux` and injected the runtime unconditionally. The failure was `Refusing to evaluate package 'python3.14-agent-vision-runtime-0.1.0' … not available on the requested hostPlatform`. Before this PR the Linux output evaluated normally.
+
+The factory now injects `visionRuntime` only when `pkgs.stdenv.hostPlatform.isDarwin`.
+
+- After the correction, `nix flake check --all-systems --no-build` passes and evaluates `packages.x86_64-linux.pdfx`, `packages.x86_64-linux.pdfx-agent`, `devShells.x86_64-linux.default`, and the three Darwin outputs.
+- `nix eval --raw .#packages.x86_64-linux.pdfx.drvPath` returns a derivation, and its derivation carries no vision-runtime dependency.
+- The Darwin package was rebuilt at `/nix/store/0jh688p5fyf5lvyqz043dyc2sws9gy45-pdf-processing-core-0.1.0`; its environment still contains `vision_client.py` (gzip decoding present) and `pdfx/ocr_image.py`, and the gzip fixture still returns `gzip-ok stream-false`.
+- Linux evaluation is established; a Linux build and a Linux runtime run are not.
+
+## Linking the measurements to a specific base checkout
+
+The 108-test command above used a base checkout path; the merged runtime is now available at `/Users/rekidunois/code/skill-repos-dev/worktree/base-skills-main-665dc0c`, which is a detached checkout of `665dc0c1ed0ee25fb26062f101c69d9f51079e95` and matches the lock. The earlier 108-test result used an older working tree whose content can no longer be attributed to one pinned revision; it is retained as a historical observation and does not stand in for the merged-commit result, which was re-established at 108 passed / 11 subtests.
 
 ## Still incomplete
 
-The public Nix package is validated only on `aarch64-darwin`; no Linux Nix build was executed. base-skills is still a private repository, so `nix build` requires credentials even though the upstream commit is merged. Real OCR quality, downstream workflow regression, final merge approval and consumer readiness are not claimed.
+The public Nix package was built and run only on `aarch64-darwin`; Linux is evaluated but not built. On Linux the package has no shared `VISION_*` path because the base runtime declares Darwin only, so only the pre-existing `PDFX_*` endpoints apply there. base-skills is still a private repository, so `nix build` requires credentials even though the upstream commit is merged. Real OCR quality, downstream workflow regression, final merge approval and consumer readiness are not claimed.

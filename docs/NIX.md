@@ -51,7 +51,7 @@ shared.lib.mkProject {
 
 项目内生成的技能目录由固定资源包提供；需要修改技能时应回到本仓源码更新后重新生成，不应直接编辑投射后的副本。
 
-该固定版本的 `agent-env-nix` 仓库为私有仓库。Nix 按普通方式获取锁定输入；若获取返回权限错误，保留并处理 Nix 报出的实际错误。pdf-processing-core 不另做权限预检查，也不会自动更改仓库可见性。
+`agent-env-nix` 可匿名读取，`base-skills` 是当前唯一需要凭据的锁定输入。Nix 按普通方式获取锁定输入；若获取返回权限错误，保留并处理 Nix 报出的实际错误。pdf-processing-core 不另做权限预检查，也不会自动更改仓库可见性。
 
 ## 同一依赖图中的公共 PDF 实例
 
@@ -77,4 +77,4 @@ shared.lib.mkProject {
 
 公共 `pdfx` 工厂包含 base-skills 的轻量 `agent-vision-runtime`，不依赖整个 macOS vision agent 或浏览器工具。提供者的本地配置、兼容路径和非 Nix 安装说明见 [共享 OCR 配置](SHARED_VISION.md)。凭据始终只在运行时读取，不放入 flake 或 Nix store。
 
-`mkVisionRuntime` 来自已合并的 base-skills `main`，由 `flake.lock` 固定到实际提交；公共包已在 `aarch64-darwin` 构建并跑通 `pdfx ocr-image`。Linux 与真实模型质量未验证。`base-skills` 当前是私有仓库，无凭据的机器在取输入阶段会被拒绝。已有原生 OCR 的平台边界保持不变。
+`mkVisionRuntime` 来自已合并的 base-skills `main`，由 `flake.lock` 固定到实际提交；只有 `aarch64-darwin` 注入该运行层，公共包已在 Darwin 构建并跑通 `pdfx ocr-image`。`x86_64-linux` 输出保持改动前的构成，不包含共享运行层，因此 Linux 上没有 `VISION_*` 配置路径，只能用原有 `PDFX_*` 端点。base 提供的运行层只声明 Darwin 平台；Linux 构建与真实模型质量未验证。`base-skills` 当前是私有仓库，无凭据的机器在取输入阶段会被拒绝。已有原生 OCR 的平台边界保持不变。
