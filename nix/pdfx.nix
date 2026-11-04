@@ -1,4 +1,4 @@
-{ pkgs, mkAgentPackage, enableHarnesses ? [ "codex" ] }:
+{ pkgs, mkAgentPackage, enableHarnesses ? [ "codex" ], visionRuntime ? null }:
 
 let
   lib = pkgs.lib;
@@ -37,7 +37,8 @@ let
       pyproject = true;
       src = stagedSource;
       build-system = [ pythonPackages.hatchling ];
-      dependencies = [ pymupdf ] ++ nativeOcrDependencies;
+      dependencies = [ pymupdf ] ++ nativeOcrDependencies
+        ++ lib.optional (visionRuntime != null) visionRuntime;
       doCheck = false;
     };
 

@@ -528,15 +528,48 @@ class RFixture(unittest.TestCase):
             ).strip(),
             "environment-glance",
         )
-        self.assertEqual(
-            self.run_batch_with_glance_selection(
-                "path-selection",
-                explicit_glance=None,
-                environment_glance=None,
-                path_dir=bin_dir,
-            ).strip(),
-            "path-glance",
-        )
+        # PATH fallback is the legacy installation contract: it applies when
+        # the installed pdfx lacks the core OCR module, whether or not the
+        # optional shared client is present. Installed-core default routing is
+        # exercised by test_shared_vision_runtime's real subprocess test.
+        real_find_spec = importlib.util.find_spec
+        with patch("importlib.util.find_spec", side_effect=lambda name, *a, **kw:
+                   None if name == "pdfx.ocr_image" else real_find_spec(name, *a, **kw)):
+            self.assertEqual(
+                self.run_batch_with_glance_selection(
+                    "path-selection",
+                    explicit_glance=None,
+                    environment_glance=None,
+                    path_dir=bin_dir,
+                ).strip(),
+                "path-glance",
+            )
+        # An installation carrying only the shared runtime must fall back to
+        # PATH glance instead of importing a core module it does not have.
+        with patch("importlib.util.find_spec", side_effect=lambda name, *a, **kw:
+                   importlib.util.ModuleSpec(name, None) if name == "vision_client"
+                   else None if name == "pdfx.ocr_image"
+                   else real_find_spec(name, *a, **kw)):
+            self.assertEqual(
+                self.run_batch_with_glance_selection(
+                    "shared-only-install",
+                    explicit_glance=None,
+                    environment_glance=None,
+                    path_dir=bin_dir,
+                ).strip(),
+                "path-glance",
+            )
+
+    def test_missing_core_module_and_glance_reports_glance_missing(self):
+        real_find_spec = importlib.util.find_spec
+        with patch("importlib.util.find_spec", side_effect=lambda name, *a, **kw:
+                   None if name in ("pdfx.ocr_image", "vision_client")
+                   else real_find_spec(name, *a, **kw)), \
+                patch("shutil.which", return_value=None), \
+                patch.dict(os.environ, {"OCR_REFRESH_GLANCE": ""}):
+            with self.assertRaises(R.JobError) as raised:
+                R.default_glance_path()
+        self.assertEqual(raised.exception.code, "glance_missing")
 
     def test_glance_timeout_and_failure(self):
         png = self.sample_png()

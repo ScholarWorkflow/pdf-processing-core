@@ -24,11 +24,11 @@ PROMPT = (
 
 def ocr_page(page, dpi: int = 200) -> str:
     png = render_page_png(page, dpi=dpi)
-    return post_image(MODEL, png, PROMPT, role="transcription")
+    return post_image(provider_model("transcription", MODEL), png, PROMPT, role="transcription")
 
 
 def ocr_png(png_bytes: bytes) -> str:
-    return post_image(MODEL, png_bytes, PROMPT, role="transcription")
+    return post_image(provider_model("transcription", MODEL), png_bytes, PROMPT, role="transcription")
 
 
 __all__ = ["MODEL", "OCRError", "ocr_page", "ocr_png"]

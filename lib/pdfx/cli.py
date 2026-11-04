@@ -48,6 +48,11 @@ def _emit(obj: dict, as_json: bool):
     return obj
 
 
+def cmd_ocr_image(args):
+    from pdfx.ocr_qwen_vl import ocr_png
+    print(ocr_png(Path(args.image).read_bytes()))
+
+
 def cmd_quality(args):
     qualities = quality_mod.scan_pdf(args.pdf)
     report = {
@@ -496,6 +501,10 @@ def _aggregate_sections(secs: list[dict]) -> str:
 def main():
     ap = argparse.ArgumentParser(prog="pdfx")
     sub = ap.add_subparsers(dest="cmd", required=True)
+
+    p = sub.add_parser("ocr-image", help="transcribe a rendered page image using shared vision configuration")
+    p.add_argument("image")
+    p.set_defaults(fn=cmd_ocr_image)
 
     p = sub.add_parser("quality", help="per-page quality tiers")
     p.add_argument("pdf")

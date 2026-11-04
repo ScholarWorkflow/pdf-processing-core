@@ -13,6 +13,9 @@ jobs:
         with:
           version: latest
       - name: Run tests
+        # The shared vision runtime lives in a private repository that this
+        # public runner cannot clone; its tests skip when the module is absent.
+        # Shared-runtime coverage runs locally and in the Nix package check.
         run: uv run --with pytest,pymupdf pytest -q lib/pdfx .apm/skills/formula-repair/tests .apm/skills/llm-ocr-refresh/tests test
       - name: Build root compatibility project
         run: |

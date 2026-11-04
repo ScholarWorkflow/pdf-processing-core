@@ -13,7 +13,7 @@
 不读取、不重算、不改写 .faudit.json / quality / 审计嫌疑页 / pending_l3 /
 empty+images>0 等任何上游判定；不生成、不修复、不验证图片说明。
 
-职责：fitz 渲染、批量 glance --ocr 子进程、unit 文件落盘、state 单写、
+职责：fitz 渲染、批量 pdfx OCR 子进程、unit 文件落盘、state 单写、
 T4 短状态（PROGRESS/RESULT/ERROR 写 stderr）、显式 finalization 原子拼回。
 
 这不是 formula-repair（任务 F）的 unit worker 路线；两条路线并存。
@@ -82,10 +82,21 @@ def default_glance_path() -> Path:
     override = os.environ.get("OCR_REFRESH_GLANCE", "").strip()
     if override:
         return Path(override).expanduser()
-    executable = shutil.which("glance")
-    if executable:
-        return Path(executable)
-    raise JobError("glance_missing", "glance is not on PATH; pass --glance or configure OCR_REFRESH_GLANCE")
+    # The installed core module is the default OCR entry. Older pdfx
+    # distributions do not ship it, so an independently installed glance
+    # stays usable; the shared runtime alone does not make that module exist.
+    import importlib.util
+    if importlib.util.find_spec("pdfx.ocr_image") is None:
+        executable = shutil.which("glance")
+        if executable:
+            return Path(executable)
+        raise JobError(
+            "glance_missing",
+            "no core OCR module is installed and no glance executable is on PATH",
+        )
+    from pdfx import ocr_image
+    return Path(ocr_image.__file__)
+
 
 
 def sha256_file(path: Path) -> str:
@@ -927,7 +938,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--state", required=True)
     run_parser.add_argument("--concurrency", type=int, default=MAX_CONCURRENCY)
     run_parser.add_argument("--glance", default=None,
-                            help="OCR executable; defaults to glance found on PATH")
+                            help="Compatibility OCR executable override; defaults to the installed pdfx OCR module")
     run_parser.set_defaults(func=cmd_run)
 
     finalize_parser = subparsers.add_parser("finalize", help="apply accepted results to source")

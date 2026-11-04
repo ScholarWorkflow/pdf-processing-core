@@ -43,6 +43,6 @@ Chrome/CDP、登录态、VPN/campus access、站点反爬等属于 `browser-pdf-
 
 - 调用方应通过发布的 distribution/API 或受管 helper 使用 `pdfx`，不要依赖本仓 checkout 内部目录布局。
 - `paper-analysis` 的 full-mode helper 负责把本地 PDF 处理结果接入 future-work / facts 的语义验证；本仓只提供底层 deterministic primitives。
-- OCR 的模型/视觉调用策略属于上层 skill/agent；本仓只承载可确定性的 PDF/OCR 辅助能力。
+- PDF OCR 的配置与提供者调用统一由 core 接入共享 vision runtime；上层保留选页、业务流程与产物管理。兼容与配置说明见 [共享 OCR 配置](docs/SHARED_VISION.md)。
 
 精确 API、CLI 与修复规则以本仓源码和测试为准；套磁 workflow 的 Stage 2 authority 以 `ScholarWorkflow/professor-contact` 当前 workflow reference 为准。
