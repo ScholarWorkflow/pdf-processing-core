@@ -565,7 +565,8 @@ class RFixture(unittest.TestCase):
         with patch("importlib.util.find_spec", side_effect=lambda name, *a, **kw:
                    None if name in ("pdfx.ocr_image", "vision_client")
                    else real_find_spec(name, *a, **kw)), \
-                patch("shutil.which", return_value=None):
+                patch("shutil.which", return_value=None), \
+                patch.dict(os.environ, {"OCR_REFRESH_GLANCE": ""}):
             with self.assertRaises(R.JobError) as raised:
                 R.default_glance_path()
         self.assertEqual(raised.exception.code, "glance_missing")

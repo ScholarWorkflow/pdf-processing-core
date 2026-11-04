@@ -1,6 +1,6 @@
 # Shared OCR configuration
 
-The public Nix `pdfx` package includes base-skills' lightweight `agent-vision-runtime`, not the macOS browser/vision agent. Set `VISION_ENV_FILE` to a local file path in the environment that launches Codex/pdfx. Keep credentials in that file, outside the Nix store. All core OCR entry points inherit this process environment.
+The `aarch64-darwin` build of the public Nix `pdfx` package includes base-skills' lightweight `agent-vision-runtime`, not the macOS browser/vision agent. Set `VISION_ENV_FILE` to a local file path in the environment that launches Codex/pdfx. Keep credentials in that file, outside the Nix store. All core OCR entry points inherit this process environment. The `x86_64-linux` build does not include the runtime, so `VISION_*` configuration has no effect there and only the `PDFX_*` endpoints apply.
 
 The shared client reads the selected file once per pdfx process. Without `VISION_ENV_FILE`, its existing default locations and precedence apply; loaded file values override process environment values. Set a single explicit file for predictable behavior. Values are simple `KEY=VALUE`, not shell expressions. Changing the file applies to the next process.
 
@@ -18,4 +18,4 @@ uv pip install "agent-vision-runtime @ git+https://github.com/ScholarWorkflow/ba
 
 This is a separate optional dependency until published: existing text/native and explicit PDFX endpoint installations continue to work without it. The runtime alone does not add core's `pdfx ocr-image`; that arrives with the next pdfx release. No unpublished PyPI availability is assumed.
 
-Consumers must use core's public `lib.mkPdfPackages` factory to inherit its shared runtime. Historical direct imports of `nix/pdfx.nix` still work but require its `visionRuntime` argument to gain this capability; those migrations are separate PRs.
+Consumers must use core's public `lib.mkPdfPackages` factory to inherit its shared runtime on Darwin; the factory injects it only there. Historical direct imports of `nix/pdfx.nix` still work but require its `visionRuntime` argument to gain this capability; those migrations are separate PRs.
