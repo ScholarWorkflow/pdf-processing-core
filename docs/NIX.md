@@ -75,5 +75,6 @@ shared.lib.mkProject {
 
 ## 视觉增强
 
-基础 `pdfx` 包不要求 `vision-tools/glance`。只有在 `glance` 及其 Python 依赖有可固定的 Nix 来源并通过对应安装检查后，仓库才会发布增强输出。此输出未交付时，不应把基础包描述成具备完整视觉 OCR 能力。
+公共 `pdfx` 工厂包含 base-skills 的轻量 `agent-vision-runtime`，不依赖整个 macOS vision agent 或浏览器工具。提供者的本地配置、兼容路径和非 Nix 安装说明见 [共享 OCR 配置](SHARED_VISION.md)。凭据始终只在运行时读取，不放入 flake 或 Nix store。
 
+本改动需要固定并验证提供 `mkVisionRuntime` 的 base 上游提交；尚未完成对应 Nix 构建前，不能声称平台安装已验证。已有原生 OCR 的平台边界保持不变。

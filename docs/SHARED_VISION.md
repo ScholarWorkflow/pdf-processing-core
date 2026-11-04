@@ -1,0 +1,21 @@
+# Shared OCR configuration
+
+The public Nix `pdfx` package includes base-skills' lightweight `agent-vision-runtime`, not the macOS browser/vision agent. Set `VISION_ENV_FILE` to a local file path in the environment that launches Codex/pdfx. Keep credentials in that file, outside the Nix store. All core OCR entry points inherit this process environment.
+
+The shared client reads the selected file once per pdfx process. Without `VISION_ENV_FILE`, its existing default locations and precedence apply; loaded file values override process environment values. Set a single explicit file for predictable behavior. Values are simple `KEY=VALUE`, not shell expressions. Changing the file applies to the next process.
+
+Use the client's `VISION_BASE_URL`, `VISION_API_KEY`, `VISION_MODEL`, optional `VISION_API_PROTOCOL` or `VISION_CHAIN`. Base handles authentication, protocol payloads, fallback and budgets. Core supplies unresized rendered image bytes and task-specific prompts; it does not invoke glance's generic resize/prompt defaults.
+
+Existing `PDFX_<ROLE>_ENDPOINT` or `PDFX_VISION_ENDPOINT` take precedence for that role and remain complete URLs using the previous OpenAI image-completion contract. Existing model overrides are preserved. `PDFX_LAYOUT_ENDPOINT` for structured box detection still requires the existing multipart `{width,height,boxes}` service: a general vision endpoint is not a substitute. A shared vision configuration alone does not add that service.
+
+`pdfx ocr-image page.png` transcribes one rendered image. `pdfx extract` keeps text/clean/native decisions and provider order unchanged. Its dedicated layout OCR adapter requires an explicit legacy endpoint or `PDFX_LAYOUT_MODEL`; with only generic shared VISION configuration it falls through to the transcription adapter, whose OCR/LaTeX prompt is preserved. An empty dedicated-layout prompt is never silently sent to an unspecified general model. The refresh runner defaults to core's image OCR subprocess. Explicit `--glance` and `OCR_REFRESH_GLANCE` remain compatibility overrides; old non-Nix installations without the shared runtime retain PATH glance fallback.
+
+Non-Nix installations may install the lightweight runtime distribution from the reviewed base-skills commit using its `.apm/skills/vision-tools` Python subproject. For the current reviewed candidate:
+
+```sh
+uv pip install "agent-vision-runtime @ git+https://github.com/ScholarWorkflow/base-skills@c2a7230606c9f3be39de400fae0f5cde62ee5b0e#subdirectory=.apm/skills/vision-tools"
+```
+
+This is a separate optional dependency until published: existing text/native and explicit PDFX endpoint installations continue to work without it. No unpublished PyPI availability is assumed.
+
+Consumers must use core's public `lib.mkPdfPackages` factory to inherit its shared runtime. Historical direct imports of `nix/pdfx.nix` still work but require its `visionRuntime` argument to gain this capability; those migrations are separate PRs.

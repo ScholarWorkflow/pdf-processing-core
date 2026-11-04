@@ -3,16 +3,21 @@
 
   inputs = {
     agent-env-nix.url = "github:RekiDunois/agent-env-nix/main";
+    # Review candidate from base-skills #9; return source to main after merge
+    # and preserve the selected revision in flake.lock.
+    base-skills.url = "github:ScholarWorkflow/base-skills/c2a7230606c9f3be39de400fae0f5cde62ee5b0e";
+    base-skills.inputs.agent-env-nix.follows = "agent-env-nix";
     nixpkgs.follows = "agent-env-nix/nixpkgs";
   };
 
-  outputs = { nixpkgs, agent-env-nix, ... }:
+  outputs = { nixpkgs, agent-env-nix, base-skills, ... }:
     let
       systems = [ "x86_64-linux" "aarch64-darwin" ];
       eachSystem = nixpkgs.lib.genAttrs systems;
       mkPdfPackages = { pkgs, enableHarnesses ? [ "codex" ] }:
         import ./nix/pdfx.nix {
           inherit pkgs enableHarnesses;
+          visionRuntime = base-skills.lib.mkVisionRuntime { inherit pkgs; python = pkgs.python3; };
           mkAgentPackage = agent-env-nix.lib.mkAgentPackage;
         };
       productsFor = system: mkPdfPackages {

@@ -48,7 +48,7 @@ def test_subprocess_pdfx_consumer_has_bounded_pep723_dependency():
     assert RELEASE_DEPENDENCY in _pep723_block(runner)
 
 
-def test_runtime_verifier_accepts_released_module_audit_command():
+def test_runtime_verifier_accepts_released_module_audit_command(monkeypatch):
     path = ROOT / "scripts/check_skill_runtime.py"
     spec = importlib.util.spec_from_file_location("check_skill_runtime_test", path)
     assert spec is not None and spec.loader is not None
@@ -59,7 +59,7 @@ def test_runtime_verifier_accepts_released_module_audit_command():
         "pdfx": SimpleNamespace(__file__=f"{installed_path}/__init__.py"),
         "pdfx.status": SimpleNamespace(__file__=f"{installed_path}/status.py"),
     }
-    module.importlib.import_module = lambda name: imported[name]
+    monkeypatch.setattr(module.importlib, "import_module", lambda name: imported[name])
     module._load_module = lambda name, path: SimpleNamespace(
         _audit_command=lambda pdf, source, standard: [
             sys.executable,
@@ -70,9 +70,9 @@ def test_runtime_verifier_accepts_released_module_audit_command():
         ]
     )
     calls = []
-    module.subprocess.run = lambda command, **kwargs: (
+    monkeypatch.setattr(module.subprocess, "run", lambda command, **kwargs: (
         calls.append(command) or SimpleNamespace(returncode=0, stdout="", stderr="")
-    )
+    ))
 
     assert module.main(["--repository-root", str(ROOT)]) == 0
     assert calls == [[sys.executable, "-m", "pdfx.cli", "formula-audit", "--help"]]

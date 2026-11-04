@@ -528,15 +528,21 @@ class RFixture(unittest.TestCase):
             ).strip(),
             "environment-glance",
         )
-        self.assertEqual(
-            self.run_batch_with_glance_selection(
-                "path-selection",
-                explicit_glance=None,
-                environment_glance=None,
-                path_dir=bin_dir,
-            ).strip(),
-            "path-glance",
-        )
+        # PATH fallback is the legacy installation contract, only when the
+        # optional shared client is absent. Installed-client default routing
+        # is exercised by test_shared_vision_runtime's real subprocess test.
+        real_find_spec = importlib.util.find_spec
+        with patch("importlib.util.find_spec", side_effect=lambda name, *a, **kw:
+                   None if name == "vision_client" else real_find_spec(name, *a, **kw)):
+            self.assertEqual(
+                self.run_batch_with_glance_selection(
+                    "path-selection",
+                    explicit_glance=None,
+                    environment_glance=None,
+                    path_dir=bin_dir,
+                ).strip(),
+                "path-glance",
+            )
 
     def test_glance_timeout_and_failure(self):
         png = self.sample_png()

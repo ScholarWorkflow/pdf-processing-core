@@ -27,7 +27,8 @@ TIMEOUT_S = 300
 ATTEMPTS = 2
 MAX_IMAGE_BYTES = 28 * 1024 * 1024
 
-_HTTP_STATS = {"requests": 0, "retries": 0, "timeouts": 0, "failures": 0}
+_HTTP_STATS = {"requests": 0, "retries": 0, "timeouts": 0, "failures": 0,
+               "shared_calls": 0, "shared_failures": 0}
 _HTTP_STATS_LOCK = threading.Lock()
 
 
@@ -46,11 +47,63 @@ def _env_name(role: str, suffix: str) -> str:
     return f"PDFX_{token}_{suffix}"
 
 
+_RUNTIME_LOCK = threading.Lock()
+_RUNTIME_LOADED = False
+
+
+def _vision_runtime(required: bool = False):
+    """Load the shared client's local configuration once per process.
+
+    Import stays optional for existing non-Nix text/native and PDFX endpoint
+    users. Nix supplies this module in the same Python environment as pdfx.
+    """
+    global _RUNTIME_LOADED
+    try:
+        import vision_client
+    except ImportError as exc:
+        if required:
+            raise OCRError(
+                "shared vision runtime is unavailable; install agent-vision-runtime "
+                "or use the Nix pdfx package"
+            ) from exc
+        return None
+    with _RUNTIME_LOCK:
+        if not _RUNTIME_LOADED:
+            vision_client.load_default_env()
+            _RUNTIME_LOADED = True
+    return vision_client
+
+
+def _endpoint_override(role: str) -> str:
+    _vision_runtime()
+    return (os.environ.get(_env_name(role, "ENDPOINT"), "").strip()
+            or os.environ.get("PDFX_VISION_ENDPOINT", "").strip())
+
+
+def _shared_chain(role: str, model: str | None = None) -> list[dict]:
+    client = _vision_runtime(required=True)
+    try:
+        chain = client.load_model_chain()
+    except (client.VisionError, ValueError, TypeError) as exc:
+        raise OCRError(str(exc)) from exc
+    override = (os.environ.get(_env_name(role, "MODEL"), "").strip()
+                or os.environ.get("PDFX_VISION_MODEL", "").strip())
+    if override:
+        selected = [entry for entry in chain if override in (entry["name"], entry["model"])]
+        chain = selected or [dict(chain[0], model=override)]
+    # A chain name identifies one deployment even when multiple deployments
+    # serve the same model. Prefer that identity over a model-name match.
+    selected = [entry for entry in chain if model == entry["name"]]
+    if not selected:
+        selected = [entry for entry in chain if model == entry["model"]]
+    if not selected and model and os.environ.get("PDFX_VISION_CHAIN", "").strip():
+        return [dict(chain[0], name=model, model=model)]
+    return selected or chain
+
+
 def provider_endpoint(role: str = "vision") -> str:
     """Return a configured provider endpoint or raise a clear OCR error."""
-    endpoint = os.environ.get(_env_name(role, "ENDPOINT"), "").strip()
-    if not endpoint:
-        endpoint = os.environ.get("PDFX_VISION_ENDPOINT", "").strip()
+    endpoint = _endpoint_override(role)
     if not endpoint:
         raise OCRError(
             f"visual provider endpoint is not configured; set "
@@ -61,6 +114,7 @@ def provider_endpoint(role: str = "vision") -> str:
 
 def provider_model(role: str, default: str | None = None) -> str:
     """Resolve a model identifier from role-specific provider configuration."""
+    _vision_runtime()
     model = os.environ.get(_env_name(role, "MODEL"), "").strip()
     if not model:
         model = os.environ.get("PDFX_VISION_MODEL", "").strip()
@@ -81,9 +135,21 @@ def configured_models(role: str = "vision", structured: bool = False) -> list[st
     optional ``structured`` boolean. Structured consumers skip entries that
     explicitly declare that they cannot return structured output.
     """
+    _vision_runtime()
+    if not _endpoint_override(role) and not os.environ.get("PDFX_VISION_CHAIN", "").strip():
+        try:
+            return [entry["name"] for entry in _shared_chain(role)
+                    if not structured or entry.get("structured", True) is not False]
+        except OCRError:
+            return []
     raw = (os.environ.get("PDFX_VISION_CHAIN", "").strip()
            or os.environ.get("VISION_CHAIN", "").strip())
     if not raw:
+        if not _endpoint_override(role):
+            try:
+                return [entry["name"] for entry in _shared_chain(role)]
+            except OCRError:
+                return []
         try:
             return [provider_model(role)]
         except OCRError:
@@ -105,6 +171,17 @@ def configured_models(role: str = "vision", structured: bool = False) -> list[st
             continue
         if model and (not structured or supports_structured):
             models.append(model)
+    if not _endpoint_override(role):
+        # Resolve legacy model selectors to the shared deployment identity
+        # before filtering capabilities. The request must use that same entry.
+        try:
+            return list(dict.fromkeys(
+                entry["name"]
+                for model in models for entry in _shared_chain(role, model)
+                if not structured or entry.get("structured", True) is not False
+            ))
+        except OCRError:
+            return []
     return models
 
 
@@ -124,6 +201,24 @@ def post_image(model: str, png_bytes: bytes, prompt: str,
         raise OCRError(f"image too large for {model}: {len(png_bytes)} bytes")
 
     b64 = base64.b64encode(png_bytes).decode("ascii")
+    if not _endpoint_override(role):
+        if role == "layout" and not prompt and not os.environ.get("PDFX_LAYOUT_MODEL", "").strip():
+            raise OCRError("dedicated layout OCR is not configured; use transcription fallback")
+        client = _vision_runtime(required=True)
+        chain = _shared_chain(role, model)
+        # Shared client's retry/budget policy owns its HTTP attempts. Count
+        # logical calls separately rather than presenting them as attempts.
+        with _HTTP_STATS_LOCK:
+            _HTTP_STATS["shared_calls"] += 1
+        try:
+            return client.describe_image(
+                f"data:{image_mime};base64,{b64}", prompt, max_tokens,
+                apply_lang=False, models=chain,
+            )
+        except client.VisionError as exc:
+            with _HTTP_STATS_LOCK:
+                _HTTP_STATS["shared_failures"] += 1
+            raise OCRError(str(exc)) from exc
     payload = {
         "model": model,
         "temperature": 0,
