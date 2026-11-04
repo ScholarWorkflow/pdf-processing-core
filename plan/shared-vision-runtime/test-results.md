@@ -4,7 +4,7 @@ Core implementation is based on `0d2348a1438edba24f966b86ab41c16bc4015edd`. Shar
 
 ## Final Python observations
 
-- Repository command: `uv run --with pytest,pymupdf --with /Users/rekidunois/code/skill-repos-dev/worktree/base-skills-main-665dc0c/.apm/skills/vision-tools pytest -q lib/pdfx .apm/skills/formula-repair/tests .apm/skills/llm-ocr-refresh/tests test`. Result on `569e68e`: 109 passed and 11 subtests passed. All eight shared-runtime tests are included; no remote model or credentials are used.
+- Repository command: `uv run --with pytest,pymupdf --with <checkout of the fixed base commit>/.apm/skills/vision-tools pytest -q lib/pdfx .apm/skills/formula-repair/tests .apm/skills/llm-ocr-refresh/tests test`. Result on `569e68e`/`4988ad8` (product code unchanged between them): 109 passed and 11 subtests passed. All eight shared-runtime tests are included; no remote model or credentials are used.
 - Without the optional shared runtime installed, the same command reports 101 passed, 8 skipped and 11 subtests passed. The eight skips are the shared-runtime module, which requires `vision_client`; `pytest.importorskip` covers the non-Nix installation case.
 - Built the staged `scholar-workflow-pdfx` wheel and the `agent-vision-runtime` wheel. Installed both in a fresh temporary virtual environment with their declared dependencies.
 - Outside both checkouts, with PYTHONPATH unset: the existing `check_release_install.py` completed, `pdfx ocr-image --help` completed, and all eight shared-runtime tests passed against installed modules. This includes a real core subprocess calling only the loopback HTTP fixture and receiving model metadata.
@@ -26,7 +26,7 @@ Local machine: `aarch64-darwin`, Nix 2.34.8. `flake.lock` records the base input
 
 The prior CI step cloned base-skills for the `agent-vision-runtime` requirement. That repository is private and the public runner has no credential for it, so the run failed during dependency resolution without executing tests. The step now runs the repository suite without the cross-repository requirement; shared-runtime tests skip there and are covered locally and by the Nix package check.
 
-- The current step command was executed locally with the surrounding environment cleared on the `9355a21` tree: 100 passed, 8 skipped, 11 subtests passed. On the current head it reports 101 passed and 8 skipped.
+- That step command was executed locally with the surrounding environment cleared on the `9355a21` tree: 100 passed, 8 skipped, 11 subtests passed. On `569e68e` and `4988ad8` it reports 101 passed and 8 skipped.
 - The remaining CI steps (root build, staged release build, wheel and sdist install checks, wheel-environment skill tests, `check_skill_runtime.py`) were run locally against the same tree and all completed without error.
 
 ## Retained failure classification
@@ -56,8 +56,8 @@ The factory now injects `visionRuntime` only when `pkgs.stdenv.hostPlatform.isDa
 
 Each aggregate result is tied to its core commit:
 
-- `49dec88`: 108 passed, 11 subtests passed with `/Users/rekidunois/code/skill-repos-dev/worktree/base-skills-main-665dc0c` (detached checkout of `665dc0c1ed0ee25fb26062f101c69d9f51079e95`, matching the lock). An earlier 108-test result used a working tree whose content can no longer be attributed to one pinned revision; it is kept as a historical observation only.
-- `569e68e` (current head): 109 passed, 11 subtests passed with the same merged checkout, plus 101 passed and 8 skipped without the runtime (the CI command).
+- `49dec88`: 108 passed, 11 subtests passed with a detached checkout of `665dc0c1ed0ee25fb26062f101c69d9f51079e95` (matching the lock). An earlier 108-test result used a working tree whose content can no longer be attributed to one pinned revision; it is kept as a historical observation only.
+- `569e68e` and `4988ad8`: 109 passed, 11 subtests passed with the same merged checkout, plus 101 passed and 8 skipped without the runtime (the CI command). `4988ad8` changed only documents, plan records and one test's environment isolation, so the result carries over.
 
 The count moved from 108 to 109 because `569e68e` added the `glance_missing` case. `lib/` did not change between those commits.
 

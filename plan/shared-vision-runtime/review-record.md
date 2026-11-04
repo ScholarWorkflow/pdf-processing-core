@@ -11,7 +11,7 @@ Status: NOT_READY pending final merge-constraint verification. The user explicit
 
 Base runtime: [base #9](https://github.com/ScholarWorkflow/base-skills/pull/9) merged to `main` as `665dc0c1ed0ee25fb26062f101c69d9f51079e95`. The flake source now points at base-skills `main` and the lock records that commit. CI no longer clones this private repository, so its shared tests skip there and run locally and in the Nix package check.
 
-The flake lock records the pinned base input. The public Nix package was evaluated, built and executed on aarch64-darwin, and `nix flake check --all-systems --no-build` now passes for both exported systems. Remaining evidence: a Linux package build.
+The flake lock records the pinned base input. The public Nix package was evaluated, built and executed on aarch64-darwin, and `nix flake check --all-systems --no-build` now passes for both exported systems. A Linux package build is optional reinforcement, not required evidence: the platform decision below accepts Linux without the shared runtime.
 
 The updated fast-review criteria allow one bounded independent review after this evidence exists. No downstream full-business regression, source certification, blanket matrix, approval or merge is claimed or requested here.
 
